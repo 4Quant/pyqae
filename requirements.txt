@@ -1,7 +1,12 @@
 numpy
 scipy
 six
+skimage >= 0.11.3
+dicom >= 0.9.9
 pillow>=2.1.0
 boto >= 2.36.0
 bolt-python >= 0.7.0
 tifffile >= 0.9.2
+elephas >= 0.3
+keras >= 1.0
+thunder >= 1.4.2
