@@ -11,3 +11,5 @@ elephas >= 0.3
 keras >= 1.0
 thunder >= 1.4.2
 pandas >= 0.17.1
+requests >= 2.9.1
+json >= 2.0.9
