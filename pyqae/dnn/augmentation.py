@@ -130,7 +130,7 @@ def add_grid(t_img, max_x = 1, max_y = 1):
                          np.linspace(-max_x,max_x,t_img.shape[2]))
     out_arr = []
     for it_img in t_img:
-        out_arr += [np.stack(t_img[0].tolist() + [xx,yy])]
+        out_arr += [np.stack(it_img.tolist() + [xx,yy])]
     return np.stack(out_arr)
 
 
@@ -159,3 +159,12 @@ def dual_tile_extract(t_img, l_img, n_img = 10, d_x = 128, d_y = 128):
         out_arr += [t_img[img_idx,:,xs:(xs+d_x),ys:(ys+d_y)]]
         out_lab += [l_img[img_idx,:,xs:(xs+d_x),ys:(ys+d_y)]]
     return np.stack(out_arr), np.stack(out_lab)
+    
+def cache_generator(i_gen, loops):
+    """
+    Extracts a given number of loops from the generator 
+    and packages them as a standard dataset. This can make multiple epoch 
+    training much faster when training on cpu
+    """
+    train_ds = [(X, y) for i, (X, y) in zip(range(loops), i_gen)]
+    return np.vstack([X for (X,y) in train_ds]), np.vstack([y for (X,y) in train_ds])
