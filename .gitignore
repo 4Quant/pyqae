@@ -23,3 +23,4 @@ thunder/lib/*dev*.egg
 .coverage*
 
 .cache
+.Rproj.user

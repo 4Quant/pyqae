@@ -178,3 +178,84 @@ def build_msh_model(file_path, in_shape = (1,3,128,128), allow_mismatch = False)
         else:
             print(mis_msg)
     return ImageModel(c_model, preproc_fun)
+
+import sys
+import os
+import h5py
+import numpy as np
+import json
+from tempfile import NamedTemporaryFile
+
+class NetEncoder(object):
+    """Encoder class.
+    Weights are serialized sequentially from the Keras flattened_layers representation
+    into:
+        - `weights`: a binary string representing the raw data bytes in float32
+            of all weights, sequentially concatenated.
+        - `metadata`: a list containing the byte length and tensor shape,
+            so that the original tensors can be reconstructed
+    """
+
+    def __init__(self, out_model):
+        self.out_model = out_model
+        self.weights = b''
+        self.metadata = []
+
+    def serialize(self):
+        """serialize method.
+        Strategy for extracting the weights is adapted from the
+        load_weights_from_hdf5_group method of the Container class:
+        see https://github.com/fchollet/keras/blob/master/keras/engine/topology.py#L2505-L2585
+        """
+        with NamedTemporaryFile(suffix = '.h5') as c_weight_file:
+            w_name = c_weight_file.name
+            self.out_model.save_weights(w_name)
+            hdf5_file = h5py.File(w_name, mode='r')
+            if 'layer_names' not in hdf5_file.attrs and 'model_weights' in hdf5_file:
+                f = hdf5_file['model_weights']
+            else:
+                f = hdf5_file
+
+            layer_names = [n.decode('utf8') for n in f.attrs['layer_names']]
+            offset = 0
+            for layer_name in layer_names:
+                g = f[layer_name]
+                weight_names = [n.decode('utf8') for n in g.attrs['weight_names']]
+                if len(weight_names):
+                    for weight_name in weight_names:
+                        meta = {}
+                        meta['layer_name'] = layer_name
+                        meta['weight_name'] = weight_name
+                        weight_value = g[weight_name].value
+                        bytearr = weight_value.astype(np.float32).tobytes()
+                        self.weights += bytearr
+                        meta['offset'] = offset
+                        meta['length'] = len(bytearr) // 4
+                        meta['shape'] = list(weight_value.shape)
+                        meta['type'] = 'float32'
+                        self.metadata.append(meta)
+                        offset += len(bytearr)
+
+            hdf5_file.close()
+
+    def save(self, out_dir, out_prefix = 'nn'):
+        """Saves weights data (binary) and weights metadata (json)
+        """
+        model_filepath = '{}_model.json'.format(os.path.join(out_dir, out_prefix))
+        with open(model_filepath,'w') as f:
+            f.write(self.out_model.to_json())
+        weights_filepath = '{}_weights.buf'.format(os.path.join(out_dir, out_prefix))
+        with open(weights_filepath, mode='wb') as f:
+            f.write(self.weights)
+        metadata_filepath = '{}_metadata.json'.format(os.path.join(out_dir, out_prefix))
+        with open(metadata_filepath, mode='w') as f:
+            json.dump(self.metadata, f)
+        return {'model_path': model_filepath, 'weights_path': weights_filepath, 'metadata_path': metadata_filepath}
+
+    @staticmethod
+    def saveModel(model, out_dir, out_prefix = 'nn'):
+        """Saves everything in a single function
+        """
+        new_net = NetEncoder(model)
+        new_net.serialize()
+        return new_net.save(out_dir, out_prefix)

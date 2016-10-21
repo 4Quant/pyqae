@@ -2,21 +2,21 @@
 
 from setuptools import setup
 
-version = '1.4.2'
+version = '0.1'
 
 setup(
-    name='thunder-python',
+    name='pyqae-python',
     version=version,
     description='large-scale image and time series analysis',
-    author='freeman-lab',
-    author_email='the.freeman.lab@gmail.com',
-    url='https://github.com/thunder-project/thunder',
+    author='fourquant',
+    author_email='info@4quant.com',
+    url='https://4quant.com',
     packages=[
-        'thunder',
-        'thunder.blocks',
-        'thunder.series',
-        'thunder.images'
+        'pyqae',
+        'pyqae.dnn',
+        'pyqae.nd',
+        'pyqae.med'
     ],
     install_requires=open('requirements.txt').read().split('\n'),
-    long_description='See https://github.com/thunder-project/thunder'
+    long_description='See our main repository'
 )
