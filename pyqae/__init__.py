@@ -2,7 +2,11 @@ import numpy as np
 from skimage.io import imread
 import pandas as pd
 from io import BytesIO, StringIO
-from dicom import read_file
+try:
+    from dicom import read_dicom_file
+except:
+    def read_dicom_file(*args, **kwargs):
+        raise Exception("Dicom Library is not available")
 
 def _setup():
     import logging
@@ -16,8 +20,6 @@ def _setup():
 _setup()
 
 __version__ = '0.1'
-
-
 
 class PyqaeContext(object):
     """
@@ -77,7 +79,7 @@ class PyqaeContext(object):
     @staticmethod
     def readBinaryBlobAsDicomArray(iblob):
         sio_blob = BytesIO(iblob)
-        return read_file(sio_blob)
+        return read_dicom_file(sio_blob)
     
     @staticmethod
     def imageTableToDataFrame(imt_rdd):

@@ -8,7 +8,7 @@ except ImportError:
     from urlparse import urlparse
     from urllib import url2pathname
 
-from thunder.readers import BotoClient, get_by_scheme
+from readers import BotoClient, get_by_scheme
 
 
 class LocalParallelWriter(object):

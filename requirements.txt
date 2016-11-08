@@ -1,6 +1,7 @@
 numpy
 scipy
 six
+pydot
 skimage >= 0.11.3
 dicom >= 0.9.9
 pillow>=2.1.0

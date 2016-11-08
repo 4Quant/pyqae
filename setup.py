@@ -13,9 +13,12 @@ setup(
     url='https://4quant.com',
     packages=[
         'pyqae',
+        'pyqae.blocks',
         'pyqae.dnn',
         'pyqae.nd',
-        'pyqae.med'
+        'pyqae.med',
+        'pyqae.images',
+        'pyqae.rddviz'
     ],
     install_requires=open('requirements.txt').read().split('\n'),
     long_description='See our main repository'
