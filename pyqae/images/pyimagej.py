@@ -1,6 +1,8 @@
 import subprocess
 import threading
 
+
+
 class RunCmd(threading.Thread):
     '''RunCmd Class
         This class allow for running a command line program using threads
@@ -48,3 +50,7 @@ class ImageJ(object):
         cmdline = self._executable + ' --no-splash -macro  \"' + macroPath + '\" \"' + macroParams + '\"'
 
         RunCmd(cmdline, timeout).Run()
+
+
+
+

@@ -19,6 +19,8 @@ def _setup():
 
 _setup()
 
+from glob import glob
+
 __version__ = '0.1'
 
 class PyqaeContext(object):
@@ -84,8 +86,23 @@ class PyqaeContext(object):
     @staticmethod
     def imageTableToDataFrame(imt_rdd):
         return imt_rdd.map(lambda x: dict(list(x[0].iteritems())+[('image_data',x[1].tolist())])).toDF()
-    
-    
+
+    def readImageDirectoryLocal(self, path, parts=100, imread_fcn = imread):
+        """
+        Read a directory of images where the path is local / shared file system
+
+        Parameters
+        ----------
+        path : String
+            A path with wildcards for the images files, must be a shared directory accessible to all nodes
+        path : List[String]
+            A path can also be a list of strings
+        """
+        read_fun = PyqaeContext._wrapIOCalls(imread_fcn, self.faulty_io, self.retry_att)
+        image_list = glob(path) if not isinstance(path, list) else path
+        assert len(image_list)>0, "Image List cannot be empty"
+        return self._cur_sc.parallelize(image_list, parts).map(lambda x: (x, read_fun(x)))
+
     def readImageDirectory(self, path, parts = 100):
         """
         Read a directory of images

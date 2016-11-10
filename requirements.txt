@@ -1,16 +1,16 @@
 numpy
 scipy
 six
+matplotlib
 pydot
-skimage >= 0.11.3
-dicom >= 0.9.9
+scikit-image >= 0.11.3
+pydicom >= 0.9.9
 pillow>=2.1.0
 boto >= 2.36.0
 bolt-python >= 0.7.0
 tifffile >= 0.9.2
-elephas >= 0.3
 keras >= 1.0
-thunder >= 1.4.2
+thunder-python >= 1.4.2
 pandas >= 0.17.1
 requests >= 2.9.1
-json >= 2.0.9
+simplejson >= 2.0.9

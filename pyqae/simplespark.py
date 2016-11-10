@@ -147,3 +147,5 @@ class FieldSelector(object):
 
     def __str__(self):
         return self.__repr__()
+
+Row = lambda **kwargs: dict(kwargs)

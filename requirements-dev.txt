@@ -1,2 +1,4 @@
 pytest
+SimpleITK >= 0.10.0
 station >= 2.0.0
+elephas >= 0.3
