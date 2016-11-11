@@ -24,12 +24,144 @@ def meshgridnd_like(in_img, rng_func = range):
     return np.meshgrid(*all_range)
 
 
+from bolt.spark.chunk import ChunkedArray
+from bolt.utils import slicify
+from PIL import Image as Pmg
+
+
+class DiskMappedLazyImage(object):
+    """
+    A lazily read image which behaves as if it were a numpy array, fully serializable
+    """
+    def __init__(self, path):
+        self.path = path
+        self.im_obj = None
+
+    def __getinitargs__(self):
+        """
+        make sure the pickling only keeps the path not the image object itself
+        :return:
+        """
+        return (self.path,)
+
+    @property
+    def image(self):
+        self.im_obj = self.im_obj if self.im_obj is not None else Pmg.open(self.path)
+        return self.im_obj
+
+    @property
+    def size(self):
+        return self.image.size + self._chan_dim
+
+    @property
+    def _chan_dim(self):
+        return np.array(self.image.crop((0,0,1,1))).shape[2:]
+
+    @property
+    def shape(self):
+        return self.size
+
+    @property
+    def dtype(self):
+        return self[0,0].dtype
+
+    @property
+    def ndim(self):
+        return len(self.shape)
+
+    def __len__(self):
+        return self.shape[0]
+
+    def __getitem__(self, index):
+        """
+        Get an item from the array through indexing.
+        Supports basic indexing with slices and ints, or advanced
+        indexing with lists or ndarrays of integers.
+        Mixing basic and advanced indexing across axes is currently supported
+        only for a single advanced index amidst multiple basic indices.
+        Parameters
+        ----------
+        index : tuple of slices
+            One or more index specifications
+        Returns
+        -------
+        NDArray
+        """
+        if isinstance(index, tuple):
+            index = list(index)
+        else:
+            index = [index]
+        int_locs = np.where([isinstance(i, int) for i in index])[0]
+
+        if len(index) > self.ndim:
+            raise ValueError("Too many indices for array")
+
+        if not all([isinstance(i, (slice, int, list, tuple, np.ndarray)) for i in index]):
+            raise ValueError("Each index must either be a slice, int, list, set, or ndarray")
+
+        # fill unspecified axes with full slices
+        if len(index) < self.ndim:
+            index += tuple([slice(0, None, None) for _ in range(self.ndim - len(index))])
+
+        # standardize slices and bounds checking
+        for n, idx in enumerate(index):
+            size = self.size[n]
+            if isinstance(idx, (slice, int)):
+                slc = slicify(idx, size)
+                # throw an error if this would lead to an empty dimension in numpy
+                if slc.step > 0:
+                    minval, maxval = slc.start, slc.stop
+                else:
+                    minval, maxval = slc.stop, slc.start
+                if minval > size - 1 or maxval < 1 or minval >= maxval:
+                    raise ValueError("Index {} in dimension {} with shape {} would "
+                                     "produce an empty dimension".format(idx, n, size))
+                index[n] = slc
+            else:
+                adjusted = array(idx)
+                inds = np.where(adjusted < 0)
+                adjusted[inds] += size
+                if adjusted.min() < 0 or adjusted.max() > size - 1:
+                    raise ValueError("Index {} out of bounds in dimension {} with "
+                                     "shape {}".format(idx, n, size))
+                index[n] = adjusted
+        # assume basic indexing
+        if all([isinstance(i, slice) for i in index]) and (len(index) <= 3):
+            assert len(index)>1, "Too short of an index"
+            imc = self.image.crop((index[0].start, index[1].start, index[0].stop, index[1].stop))
+            out_arr = np.array(imc)[::index[1].step, ::index[0].step].swapaxes(0,1)
+            return out_arr[:,:,index[2]] if len(index)==3 else out_arr
+
+        else:
+            raise NotImplementedError("When mixing basic indexing (slices and int) with "
+                                      "with advanced indexing (lists, tuples, and ndarrays), "
+                                      "can only have a single advanced index")
+
+
+def paths_to_tiled_image(paths, context = None, tile_size = (256, 256), padding = (0, 0)):
+    in_rdd = paths.zipWithIndex().map(lambda x: (x[1], DiskMappedLazyImage(x[0])))
+    first_ds = in_rdd.values().first()
+    return ChunkedArray(in_rdd,
+                        shape=(in_rdd.count(),) + first_ds.size,
+                        split=1,
+                        dtype=first_ds[0, 0].dtype
+                        )._chunk(size=tile_size, axis=None, padding=padding)
+
+def single_chunky_image(in_ds, context, tile_size = (256, 256), padding = (0,0)):
+    in_rdd = context.parallelize([((0,), in_ds)])
+    return ChunkedArray(in_rdd,
+                  shape = (in_rdd.count(),)+in_ds.size,
+                  split = 1,
+                  dtype = in_ds[0,0].dtype
+                 )._chunk(size = tile_size, axis = None, padding = padding)
+
 def stack(arr_list, axis=0):
     """
     since numpy 1.8.2 does not have the stack command
     """
     assert axis == 0, "Only works for axis 0"
     return np.vstack(map(lambda x: np.expand_dims(x, 0), arr_list))
+
 
 
 def filt_tensor(image_stack, filter_op, tile_size=(128, 128), padding=(0, 0), *filter_args, **filter_kwargs):

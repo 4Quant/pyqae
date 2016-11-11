@@ -1,7 +1,7 @@
 """
 Tools for using SITK inside of PySpark
 """
-
+import os
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +34,8 @@ class ITKImage(object):
         self.verbose = verbose
 
     def _create_empty_image(self):
-        return sitk.Image(self.itkdata['itk_Size'], self.itkdata['itk_PixelID'],
+        return sitk.Image(self.itkdata['itk_Size'],
+                          self.itkdata['itk_PixelID'],
                           self.itkdata['itk_NumberOfComponentsPerPixel'])
 
     def create_image(self):
@@ -76,8 +77,22 @@ class ITKImage(object):
         :return:
         """
         return sitk.WriteImage(self.create_image(), path, useCompression)
+
+
+    @staticmethod
+    def _has_fields(in_fields):
+        field_to_check = """array, array_dtype, itk_Depth, itk_Dimension,
+        itk_Direction, itk_Height, itk_NumberOfComponentsPerPixel,
+        itk_Origin, itk_PixelID, itk_PixelIDTypeAsString,
+        itk_PixelIDValue, itk_Size, itk_Spacing, itk_Width"""
+
+        field_to_check.replace("\n", "").replace(" ", "")
+        for cfield in field_to_check.split(","):
+            assert cfield in in_fields, "DataFrame is missing column:{}, {}".format(cfield, in_fields)
+
     @staticmethod
     def _parse_dict(in_dict):
+        ITKImage._has_fields(in_dict.keys())
         arr = np.array(in_dict.pop('array')).astype(in_dict.pop('array_dtype'))
         itkdata = {}
         metadata = {}
@@ -88,13 +103,21 @@ class ITKImage(object):
                 metadata[k] = "{}".format(v)
         return ITKImage(metadata, itkdata, arr)
 
+
     @staticmethod
-    def read_itk_as_obj(img_path):
+    def load_file(img_path):
         """
         Reads an ITK image to a serializable python tuple with the fields extracted
         :param img_path:
         :return:
         """
+
+        itk_img = sitk.ReadImage(img_path)
+        return ITKImage.convert(itk_img)
+
+
+    @staticmethod
+    def convert(itk_img):
         itk_keys = ['Depth',
                     'Dimension',
                     'Direction',
@@ -107,10 +130,64 @@ class ITKImage(object):
                     'Size',
                     'Spacing',
                     'Width']
-        itk_img = sitk.ReadImage(img_path)
         metadata = dict(map(lambda x: (x, itk_img.GetMetaData(x)), itk_img.GetMetaDataKeys()))
         itkdata = dict([("itk_{}".format(key), getattr(itk_img, "Get{}".format(key))()) for key in itk_keys])
         return ITKImage(metadata, itkdata, sitk.GetArrayFromImage(itk_img))
+
+def apply_filter(in_df, filter_op):
+    """
+    Apply a SimpleITK filter to a given image
+    :param in_df: DataFrame made from a series of ITK files
+    :param filter_op: sitk.Image => sitk.Image an operation which converts one image to another
+    :return: DataFrame containing the new image data
+    """
+    itk_rdd = in_df.rdd.map(lambda x: ITKImage._parse_dict(x.asDict()))
+    post_rdd = itk_rdd.map(lambda x: Row(**ITKImage.convert(filter_op(x.create_image()))._asdict()))
+    return post_rdd.toDF()
+
+def show_first_image(in_df):
+    """
+    Show the first image in the result
+    :param in_df:
+    :return:
+    """
+    return in_df.rdd.map(lambda x: ITKImage._parse_dict(x.asDict())).first().show()
+
+def fix_df_col_names(t_prev_df):
+    """
+    Since the column names need to be valid (see banned characters) in order to be saved as parquet
+    :param t_prev_df: DataFrame to fix
+    :return: DataFrame with renamed columns
+    """
+    new_df = t_prev_df
+    for col in t_prev_df.columns:
+        new_col = col
+        for fix_chr in ' ,;{}()\n\t=':
+            new_col = new_col.replace(fix_chr, "")
+        new_df = new_df.withColumnRenamed(col, new_col)
+    return new_df
+
+def save_itk_local(in_df, base_path, allow_overwrite = False, file_ext = 'tif', useCompression = False):
+    """
+    Save an ITK dataframe on local (shared directory) paths
+    :param in_df: DataFrame of the itk images
+    :param base_path: string the directory to save in
+    :param allow_overwrite: bool allow overwrite to occur
+    :param file_ext: string the extension to save to
+    :param useCompression: bool compress the output
+    """
+    try:
+        os.mkdir(base_path)
+    except:
+        print('{} already exists'.format(base_path))
+        if not allow_overwrite: raise RuntimeError("Overwriting has not been enabled! Please remove directory {}".format(base_path))
+
+    def _write(x):
+        o_row, uid = x
+        new_path = os.path.join(base_path, "{}.{}".format(uid, file_ext))
+        ITKImage._parse_dict(o_row.asDict()).save(new_path, useCompression = useCompression)
+        return new_path
+    return base_path, in_df.rdd.zipWithUniqueId().map(_write).cache().collect()
 
 def itk_obj_to_pandas(obj_lst):
     import pandas as pd
@@ -129,7 +206,7 @@ def _read_to_rdd(paths, context = None, **kwargs):
         path_rdd = context.parallelize(paths, **kwargs)
     else:
         path_rdd = paths
-    return path_rdd.map(lambda cpath: (cpath, ITKImage.read_itk_as_obj(cpath)._asdict()))
+    return path_rdd.map(lambda cpath: (cpath, ITKImage.load_file(cpath)._asdict()))
 
 def read_to_dataframe(paths, context = None, **kwargs):
     """
