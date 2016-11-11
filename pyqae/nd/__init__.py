@@ -1,5 +1,6 @@
 # Tools for ND data processing 
 import bolt
+import bolt.spark
 from bolt import *
 from bolt.spark.construct import ConstructSpark as cs
 from bolt.spark.array import BoltArraySpark as raw_array
@@ -7,12 +8,15 @@ sp_array = cs.array
 import numpy as np
 import os
 from skimage.io import imsave
+import warnings
 
 try:
     from pyspark.sql import Row
+    from pyspark.rdd import RDD
 except ImportError:
     print("Pyspark is not available using simplespark backend instead")
     from ..simplespark import Row
+    from ..simplespark import LocalRDD as RDD
 
 def meshgridnd_like(in_img, rng_func = range):
     """
@@ -26,44 +30,134 @@ def meshgridnd_like(in_img, rng_func = range):
 
 from bolt.spark.chunk import ChunkedArray
 from bolt.utils import slicify
-from PIL import Image as Pmg
+from PIL import Image as PImg
+
+class LazyImageBackend(object):
+    """
+    Interface for having lazy/partial image loading
+    """
+    def __init__(self, path):
+        self.path = path
+        self._im_obj = None  # should not be directly referenced
+
+    def __getstate__(self):
+        return (self.path, )
+
+    def __setstate__(self, state):
+        self.path = state[0]
+        self._im_obj = None
+
+    def open_image(self):
+        raise RuntimeError("Not yet implemented")
+
+    def read_region(self, xstart, xend, ystart, yend):
+        raise RuntimeError("Not yet implemented")
+
+    def get_tile_xy_size(self):
+        raise RuntimeError("Not yet implemented")
+
+    def _get_chan_dim(self):
+        """
+        the dimension of the output image in channels
+        :return: tuple () for 2D, (3, ) for RGB
+        """
+        return self.read_region(0, 1, 0, 1).shape[2:]
+
+    @property
+    def dtype(self):
+        return self.read_region(0, 1, 0, 1).dtype
+
+    @property
+    def shape(self):
+        return self.get_tile_xy_size() + self._get_chan_dim()
+
+    @property
+    def ndim(self):
+        return len(self.shape)
+
+class LazyImagePillowBackend(LazyImageBackend):
+    def open_image(self):
+        self._im_obj = self._im_obj if self._im_obj is not None else PImg.open(self.path)
+        return self._im_obj
+
+    def read_region(self, xstart, xend, ystart, yend):
+        imc = self.open_image().crop((xstart, ystart, xend, yend))
+        return np.array(imc).swapaxes(0,1)
+
+    def get_tile_xy_size(self):
+        return self.open_image().size
+
+backends = [LazyImagePillowBackend]
+try:
+    from osgeo import gdal
+    class LazyImageGDALBackend(LazyImageBackend):
+        """
+        A GDAL-based implementation of the lazy image backend
+        """
+        def open_image(self):
+            # remove the caching since it causes strange issues still
+            # self._im_obj = self._im_obj if self._im_obj is not None else self._open_image()
+            return self._open_image()
+
+        def _open_image(self):
+            return gdal.Open(self.path)
+
+        def read_region(self, xstart, xend, ystart, yend):
+            temp_img_obj = self.open_image()
+            x_size = xend-xstart
+            y_size = yend-ystart
+            assert x_size >= 0, "X Size must be greater than 0, {}-{}".format(xstart, xend)
+            assert y_size >= 0, "Y Size must be greater than 0, {}-{}".format(ystart, yend)
+            out_tile = temp_img_obj.ReadAsArray(int(xstart), int(ystart), int(x_size), int(y_size)).swapaxes(0,1)
+            if out_tile is None:
+                raise RuntimeError("Tile Information cannot be read {}-{}, {}-{}".format(xstart, xend, ystart, yend))
+            return out_tile
+        def get_tile_xy_size(self):
+            c_img = self.open_image()
+            return c_img.RasterXSize, c_img.RasterYSize
+
+        def _get_chan_dim(self):
+            """
+            the dimension of the output image in channels
+            :return: tuple () for 2D, (3, ) for RGB
+            """
+            rsc = self.open_image().RasterCount
+            return (rsc,) if rsc>1 else tuple()
+
+    backends += [LazyImageGDALBackend]
+except ImportError:
+    warnings.warn("The GDAL Lazy Image Backend requires that the GDAL package is installed", ImportWarning)
 
 
 class DiskMappedLazyImage(object):
     """
     A lazily read image which behaves as if it were a numpy array, fully serializable
+
+
+    # check boundary issues for tiles
+    for c_ax, c_back in zip(axs, backends):
+        c_image = DiskMappedLazyImage(i_img, c_back)
+        for i in [0, c_image.shape[0]-20, c_image.shape[0]]:
+            for j in [0, c_image.shape[1]-20, c_image.shape[1]]:
+                try:
+                    o_shape = c_image[i:i+20, j:j+20].shape
+                except:
+                    o_shape = 'Failed'
+                print(c_back, (i,j), o_shape)
     """
-    def __init__(self, path):
+    def __init__(self, path, bckend):
+        assert isinstance(path, str), "Path must be a single string, {}".format(path)
+        self._bckend = bckend(path)
+        assert isinstance(self._bckend, LazyImageBackend), "Instantiated backend mmust be a lazy image"
         self.path = path
-        self.im_obj = None
-
-    def __getinitargs__(self):
-        """
-        make sure the pickling only keeps the path not the image object itself
-        :return:
-        """
-        return (self.path,)
-
-    @property
-    def image(self):
-        self.im_obj = self.im_obj if self.im_obj is not None else Pmg.open(self.path)
-        return self.im_obj
-
-    @property
-    def size(self):
-        return self.image.size + self._chan_dim
-
-    @property
-    def _chan_dim(self):
-        return np.array(self.image.crop((0,0,1,1))).shape[2:]
 
     @property
     def shape(self):
-        return self.size
+        return self._bckend.shape
 
     @property
     def dtype(self):
-        return self[0,0].dtype
+        return self._bckend.dtype
 
     @property
     def ndim(self):
@@ -105,7 +199,7 @@ class DiskMappedLazyImage(object):
 
         # standardize slices and bounds checking
         for n, idx in enumerate(index):
-            size = self.size[n]
+            size = self.shape[n]
             if isinstance(idx, (slice, int)):
                 slc = slicify(idx, size)
                 # throw an error if this would lead to an empty dimension in numpy
@@ -128,8 +222,11 @@ class DiskMappedLazyImage(object):
         # assume basic indexing
         if all([isinstance(i, slice) for i in index]) and (len(index) <= 3):
             assert len(index)>1, "Too short of an index"
-            imc = self.image.crop((index[0].start, index[1].start, index[0].stop, index[1].stop))
-            out_arr = np.array(imc)[::index[1].step, ::index[0].step].swapaxes(0,1)
+            assert index[0].start<=index[0].stop, "Indexes cannot be backwards"
+            assert index[1].start <= index[1].stop, "Indexes cannot be backwards"
+            out_arr = self._bckend.read_region(xstart = int(index[0].start), xend = int(index[0].stop),
+                                               ystart = int(index[1].start), yend = int(index[1].stop))
+            out_arr = out_arr[::index[0].step, ::index[1].step]
             return out_arr[:,:,index[2]] if len(index)==3 else out_arr
 
         else:
@@ -138,14 +235,32 @@ class DiskMappedLazyImage(object):
                                       "can only have a single advanced index")
 
 
-def paths_to_tiled_image(paths, context = None, tile_size = (256, 256), padding = (0, 0)):
-    in_rdd = paths.zipWithIndex().map(lambda x: (x[1], DiskMappedLazyImage(x[0])))
-    first_ds = in_rdd.values().first()
-    return ChunkedArray(in_rdd,
-                        shape=(in_rdd.count(),) + first_ds.size,
-                        split=1,
-                        dtype=first_ds[0, 0].dtype
-                        )._chunk(size=tile_size, axis=None, padding=padding)
+def paths_to_tiled_image(paths, context = None, tile_size = (256, 256), padding = (0, 0),
+                         backend = backends[-1],
+                         skip_chunk = False,
+                         **kwargs):
+    """
+    Create an tiled ND image from a collection of paths
+    :param paths: List[str] / RDD[str] a list or RDD of strings containing image paths
+    :param context: SparkContext the context to make the RDD from if paths is a list
+    :param tile_size: the size of tiles to cut
+    :param padding:  the padding to use
+    :param backend: The LazyImageBackend to use for reading the image data in (by default uses the last one, GDAL if available)
+    :param kwargs: other arguments for creating the initial RDD
+    :return: a ChunkedRDD containing the image data as tiles (use .unchunk to make into a normal RDD)
+    """
+    path_rdd = paths if isinstance(paths, RDD) else context.parallelize(paths, **kwargs)
+    _create_dmzi = lambda fle_path: DiskMappedLazyImage(fle_path, backend)
+    in_rdd = path_rdd.zipWithIndex().map(lambda x: (x[1], _create_dmzi(x[0])))
+    first_ds = _create_dmzi(path_rdd.first())
+    ca_data = ChunkedArray(in_rdd,
+                 shape=(path_rdd.count(),) + first_ds.shape,
+                 split=1,
+                 dtype=first_ds[0, 0].dtype
+                 )
+    if skip_chunk: return ca_data
+    return ca_data._chunk(size=tile_size, axis=None, padding=padding)
+
 
 def single_chunky_image(in_ds, context, tile_size = (256, 256), padding = (0,0)):
     in_rdd = context.parallelize([((0,), in_ds)])
@@ -177,7 +292,7 @@ def filt_tensor(image_stack, filter_op, tile_size=(128, 128), padding=(0, 0), *f
     """
 
     assert len(image_stack.shape) == 4, "Operations are intended for 4D inputs, {}".format(image_stack.shape)
-    assert isinstance(image_stack, bolt.base.BoltArray), "Can only be performed on BoltArray Objects"
+    assert isinstance(image_stack, raw_array), "Can only be performed on BoltArray Objects"
     chunk_image = image_stack.chunk(size=tile_size, padding=padding)
     filt_img = chunk_image.map(
         lambda col_img: stack([filter_op(x, *filter_args, **filter_kwargs) for x in col_img.swapaxes(0, 2)],
@@ -245,7 +360,7 @@ def fromrdd(rdd, dims=None, nrecords=None, dtype=None, ordered=False):
 def save_tensor_local(in_bolt_array, base_path, allow_overwrite = False, file_ext = 'tif'):
     """
     Save a bolt_array on local (shared directory) paths
-    :param bolt_array: the bolt array object
+    :param in_bolt_array: the bolt array object
     :param base_path: the directory to save in
     :param allow_overwrite: allow overwrite to occur
     :param file_ext: the extension to save to

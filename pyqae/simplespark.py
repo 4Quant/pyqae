@@ -7,14 +7,18 @@ append_dict = lambda i_dict, **kwargs: dict(list(i_dict.items()) + list(kwargs.i
 append_dict_raw = lambda i_dict, o_dict: dict(list(i_dict.items()) + list(o_dict.items()))
 cflatten = lambda x: list(chain(*x))
 from collections import defaultdict
+import warnings
 
 class LocalRDD(object):
-    def __init__(self, items, prev, command, code='', calc_time=None, **args):
+    def __init__(self, items, prev, command, code='', calc_time=None, verbose = False, **args):
         self.items = list(items)
         self.prev = prev
         self.command_args = (command, args)
         self.code = code
+        self.verbose = verbose
         if calc_time is not None: self.calc_time = calc_time
+        if verbose:
+            print("Creating new RDD[{}] from {} with {} entries".format(self.type, command, len(self.items)))
 
     def first(self):
         return self.items[0]
@@ -40,7 +44,8 @@ class LocalRDD(object):
         etime = time.time() - stime
         return LocalRDD(new_list, [self], op_name, apply_func=in_func,
                         calc_time=etime,
-                        code=trans_func_code, **args)
+                        code=trans_func_code,
+                        verbose = self.verbose, **args)
 
     def map(self, apply_func):
         return self._transform('map', apply_func,
@@ -49,6 +54,10 @@ class LocalRDD(object):
     def mapValues(self, apply_func):
         return self._transform('mapValues', apply_func,
                                lapply_func=lambda x_list: [(k, apply_func(v)) for (k, v) in x_list])
+
+    def values(self):
+        return self._transform('values', lambda x: x,
+                               lapply_func=lambda x_list: [v for (k, v) in x_list])
 
     def flatMap(self, apply_func):
         return self._transform('flatMap', apply_func,
@@ -69,12 +78,33 @@ class LocalRDD(object):
         return self._transform('groupBy', apply_func,
                                lapply_func=gb_func)
 
+    def filter(self, apply_func):
+        return self._transform('filter', apply_func,
+                               lapply_func=lambda x_list: filter(apply_func, x_list))
+
     def saveAsPickleFile(self, filename):
         return self._transform('saveAsPickleFile', NamedLambda('SaveFileShard', lambda x: x),
                                lapply_func=lambda x_list: [(x, filename) for x in x_list])
 
     def repartition(self, *args):
+        warnings.warn("Partitioning not really supported yet", RuntimeWarning)
         return self
+
+    def partitionBy(self, *args, **kwargs):
+        warnings.warn("Partitioning not really supported yet", RuntimeWarning)
+        return self
+
+    def mapPartitions(self, apply_func):
+        warnings.warn("Partitioning not really supported yet", RuntimeWarning)
+        return self._transform('groupBy', apply_func,
+                               lapply_func=lambda x_list: apply_func(x_list))
+
+    def zipWithIndex(self):
+        return self._transform('zipWithIndex', zip,
+                               lapply_func=lambda x_list: [(x,i) for i, x in enumerate(x_list)])
+
+    def zipWithUniqueId(self):
+        return self.zipWithIndex()
 
     @property
     def type(self):
@@ -93,11 +123,15 @@ class LocalRDD(object):
 
 
 class LocalSparkContext(object):
-    def __init__(self):
+    """
+    A fake spark context for testing/debugging purposes
+    """
+    def __init__(self, verbose = False):
+        self.verbose = verbose
         pass
 
     def parallelize(self, in_list, parts = 1, **kwargs):
-        return LocalRDD(in_list, [], 'parallelize', in_list=in_list)
+        return LocalRDD(in_list, [], 'parallelize', in_list=in_list, verbose = self.verbose)
 
 
 class NamedLambda(object):

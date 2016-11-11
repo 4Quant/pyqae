@@ -7,7 +7,7 @@ package_files = ['pyqae'] \
                 + [os.path.split(path)[0].replace("/", ".") for path in glob(os.path.join('pyqae', '*', '__init__.py'))]
 
 
-version = '0.1'
+version = '0.20'
 
 setup(
     name='pyqae-python',
