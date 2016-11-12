@@ -1,7 +1,7 @@
 import pytest
 from numpy import allclose, array, asarray, add, ndarray, generic
 
-from thunder import series, images
+from pyqae import series, images
 
 pytestmark = pytest.mark.usefixtures("eng")
 

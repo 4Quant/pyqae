@@ -1,4 +1,4 @@
-from thunder.readers import LocalFileReader, LocalParallelReader
+from pyqae.readers import LocalFileReader, LocalParallelReader
 
 
 def make(tmpdir, files):

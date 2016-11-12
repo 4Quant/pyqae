@@ -153,16 +153,16 @@ def build_msh_model(file_path, in_shape = (1,3,128,128), allow_mismatch = False)
         preproc_fun = types.FunctionType(marshal.load(rf), g_var, "preproc_fun")
         out_weights = marshal.load(rf)
         assert type(out_weights) is dict, "The weights must be stored in a dictionary"
-    for f_name, f_func in func_dict.iteritems(): 
+    for f_name, f_func in func_dict.items():
         #exec('{} = f_func'.format(f_name))
         print(f_func)
     #print('Globals:', g_var)
     #print('Locals:', l_var)
     g_var['np'] = np
-    for i,v in l_var.iteritems(): g_var[i] = v
+    for i,v in l_var.items(): g_var[i] = v
     exec('c_model = {}({})'.format(mdl_spawn_fcn_name, in_shape), g_var)
     c_model = g_var['c_model']
-    for (lay_name, (lay_idx, lay_weights)) in out_weights.iteritems():
+    for (lay_name, (lay_idx, lay_weights)) in out_weights.items():
         assert lay_name == c_model.layers[lay_idx].name, "Names do not match {} != {}".format(lay_name, c_model.layers[lay_idx].name)
         c_weights = c_model.layers[lay_idx].get_weights()
         assert len(c_weights) == len(lay_weights), "{} layer weights must have same number".format(lay_name)

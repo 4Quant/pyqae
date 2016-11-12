@@ -1,9 +1,9 @@
 import pytest
 from numpy import arange, allclose, array, mean, apply_along_axis, float64
 
-from thunder.images.readers import fromlist, fromarray
-from thunder.images.images import Images
-from thunder.series.series import Series
+from pyqae.images.readers import fromlist, fromarray
+from pyqae.images.images import Images
+from pyqae.series.series import Series
 
 
 pytestmark = pytest.mark.usefixtures("eng")

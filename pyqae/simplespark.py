@@ -133,6 +133,14 @@ class LocalSparkContext(object):
     def parallelize(self, in_list, parts = 1, **kwargs):
         return LocalRDD(in_list, [], 'parallelize', in_list=in_list, verbose = self.verbose)
 
+class LocalSQLContext(object):
+    """
+    A fake SQL context
+    """
+    def __init__(self, *args, **kwargs):
+        warnings.warn("LocalSQLContext has not been implemented yet and probably will not behave properly",
+                      RuntimeWarning)
+        ##TODO implement functionality using pandas
 
 class NamedLambda(object):
     """

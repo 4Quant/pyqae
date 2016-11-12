@@ -5,7 +5,7 @@ import json
 from numpy import arange, array, allclose, save, savetxt
 
 from bolt import array as barray
-from thunder.series.readers import fromarray, fromtext, frombinary, fromexample
+from pyqae.series.readers import fromarray, fromtext, frombinary, fromexample
 
 pytestmark = pytest.mark.usefixtures("eng")
 

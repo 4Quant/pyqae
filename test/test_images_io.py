@@ -5,7 +5,7 @@ import json
 from numpy import arange, allclose
 
 from bolt import array as barray
-from thunder.images.readers import fromlist, fromarray, frompng, fromtif, frombinary, fromexample
+from pyqae.images.readers import fromlist, fromarray, frompng, fromtif, frombinary, fromexample
 
 pytestmark = pytest.mark.usefixtures("eng")
 

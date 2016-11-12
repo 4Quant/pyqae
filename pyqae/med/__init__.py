@@ -1,7 +1,7 @@
 """
 Modules related to Medicine and DICOM Files
 """
-from dicom import read_file as dicom_simple_read
+from .. import read_dicom_file as dicom_simple_read
 import numpy as np
 from glob import glob
 import pandas as pd
@@ -183,7 +183,8 @@ def _np_to_uri(in_array, cmap='RdBu'):
     test_img_data -= test_img_data.mean()
     test_img_data /= test_img_data.std()
     test_img_color = cm.get_cmap(cmap)((test_img_data + 0.5).clip(0, 1))
-    p_data = PImage.fromarray((test_img_color * 255).clip(0, 255).astype(np.uint8))
+    test_img_color *= 255
+    p_data = PImage.fromarray(test_img_color.clip(0, 255).astype(np.uint8))
     rs_p_data = p_data.resize((128, 128), resample=PImage.BICUBIC)
     out_img_data = BytesIO()
     rs_p_data.save(out_img_data, format='png')

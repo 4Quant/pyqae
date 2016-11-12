@@ -1,6 +1,5 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
+
 import numpy as np
 import skimage.transform
 import scipy
@@ -17,6 +16,7 @@ from skimage.util.montage import montage2d
 
 from scipy.stats import norm
 from scipy import ndimage
+import keras.backend as K
 
 from skimage.io import imsave
 import matplotlib.cm as cm

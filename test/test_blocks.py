@@ -1,7 +1,7 @@
 import pytest
 from numpy import arange, array, allclose, ones, float64, asarray
 
-from thunder.images.readers import fromlist
+from pyqae.images.readers import fromlist
 
 pytestmark = pytest.mark.usefixtures("eng")
 

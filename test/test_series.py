@@ -1,8 +1,8 @@
 import pytest
 from numpy import allclose, arange, array, asarray, dot, cov, corrcoef, float64
 
-from thunder.series.readers import fromlist, fromarray
-from thunder.images.readers import fromlist as img_fromlist
+from pyqae.series.readers import fromlist, fromarray
+from pyqae.images.readers import fromlist as img_fromlist
 
 pytestmark = pytest.mark.usefixtures("eng")
 

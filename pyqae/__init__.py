@@ -1,9 +1,25 @@
+from __future__ import absolute_import, division, print_function
 import numpy as np
 from skimage.io import imread
 import pandas as pd
 from io import BytesIO, StringIO
+import os
+
 try:
-    from dicom import read_dicom_file
+    # These are only available inside of the pyspark application (using py4j)
+    from pyspark.sql import Row
+    from pyspark.rdd import RDD
+    from pyspark import SparkContext
+    from pyspark.sql import SQLContext
+except ImportError:
+    print("Pyspark is not available using simplespark backend instead")
+    from .simplespark import Row
+    from .simplespark import LocalRDD as RDD
+    from .simplespark import LocalSparkContext as SparkContext
+    from .simplespark import LocalSQLContext as SQLContext
+
+try:
+    from dicom import read_file as read_dicom_file
 except:
     def read_dicom_file(*args, **kwargs):
         raise Exception("Dicom Library is not available")
@@ -21,7 +37,7 @@ _setup()
 
 from glob import glob
 
-__version__ = '0.1'
+__version__ = '0.2'
 
 class PyqaeContext(object):
     """
@@ -44,8 +60,7 @@ class PyqaeContext(object):
         assert retry_att>0, "Retry attempt must be greater than 0"
         self.faulty_io = faulty_io
         self.retry_att = retry_att
-        if cur_sc is None: 
-            from pyspark import SparkContext
+        if cur_sc is None:
             self._cur_sc = SparkContext(*args, **kwargs)
         else:
             self._cur_sc = cur_sc

@@ -2,6 +2,7 @@ import logging
 import os
 from glob import glob
 import json
+import numpy as np
 
 class TypeTool(object):
     """
