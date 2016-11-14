@@ -76,7 +76,7 @@ class Blocks(Base):
         """
         Convert blocks to images.
         """
-        from thunder.images.images import Images
+        from pyqae.images.images import Images
 
         if self.mode == 'spark':
             values = self.values.values_to_keys((0,)).unchunk()
@@ -90,7 +90,7 @@ class Blocks(Base):
         """
         Converts blocks to series.
         """
-        from thunder.series.series import Series
+        from pyqae.series.series import Series
 
         if self.mode == 'spark':
             values = self.values.values_to_keys(tuple(range(1, len(self.shape)))).unchunk()

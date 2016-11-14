@@ -156,8 +156,6 @@ def build_msh_model(file_path, in_shape = (1,3,128,128), allow_mismatch = False)
     for f_name, f_func in func_dict.items():
         #exec('{} = f_func'.format(f_name))
         print(f_func)
-    #print('Globals:', g_var)
-    #print('Locals:', l_var)
     g_var['np'] = np
     for i,v in l_var.items(): g_var[i] = v
     exec('c_model = {}({})'.format(mdl_spawn_fcn_name, in_shape), g_var)

@@ -2,28 +2,40 @@
 Modules related to Medicine and DICOM Files
 """
 from .. import read_dicom_file as dicom_simple_read
+
 import numpy as np
-from glob import glob
+
 import pandas as pd
 
 import dicom
 from collections import namedtuple
-from pyspark.sql.types import _infer_type, _has_nulltype, StructType, MapType, ArrayType
-from pyspark.sql import Row, F
-import pyspark.sql.types as sq_types
+
+from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
+
 
 from PIL import Image as PImage
 from matplotlib.pyplot import cm
 import base64
 from io import BytesIO
-
+from typing import Any
 
 type_info = namedtuple('type_info', ['inferrable', 'realtype', 'has_nulltype', 'length', 'is_complex'])
 
 
 def _tlen(x):
+    # type: (Any) -> int
     """
     Try to calculate the length, otherwise return 1
+    Examples:
+
+    >>> _tlen([1,2,3])
+    3
+    >>> _tlen("Hi")
+    2
+    >>> _tlen(0)
+    1
+    >>> _tlen(np.NAN)
+    0
     """
     try:
         return len(x)
@@ -40,7 +52,7 @@ def _tnonempty(x):
 
 
 def safe_type_infer(x):
-    COMPLEX_TYPES = (StructType, MapType)
+    COMPLEX_TYPES = (sq_types.StructType, sq_types.MapType)
     try:
         sq_type = _infer_type(x)
         return type_info(True, sq_type, has_nulltype=_has_nulltype(sq_type),
@@ -65,10 +77,7 @@ def _countmissingvalues(crow):
     return len(nz_vals)
 
 
-BAD_COLUMNS = tuple()
-
-
-def dicom_to_dict(in_dicom, read_array=True):
+def dicom_to_dict(in_dicom):
     temp_dict = {a.name: a.value for a in in_dicom.iterall()}
     if in_dicom.__dict__.get('_pixel_array', None) is not None:
         temp_dict['Pixel Array'] = in_dicom.pixel_array.tolist()
@@ -147,17 +156,21 @@ _sq_conv_map = {
 
 def _ndarray_to_sql(in_arr):
     """
+    Code for converting a numpy array into a SQLType
+    :param in_arr: the array
+    :return: SQLType for array
 
-    _ndarray_to_sql(np.zeros((3,3,3), np.float32))
-    >>> ArrayType(ArrayType(ArrayType(FloatType,true),true),true)
+    >>> _ndarray_to_sql(np.zeros((3,3,3), np.float32))
+    ArrayType(ArrayType(ArrayType(FloatType,true),true),true)
 
-    _ndarray_to_sql(np.zeros((3,3,3), np.int16))
-    >>> ArrayType(ArrayType(ArrayType(IntegerType,true),true),true)
+    >>> _ndarray_to_sql(np.zeros((3,3,3), np.int16))
+    ArrayType(ArrayType(ArrayType(IntegerType,true),true),true)
 
-    _ndarray_to_sql(np.zeros((3,3,3), np.object))
+    >>> _ndarray_to_sql(np.zeros((3,3,3), np.object))
     Exception: object is not supported in SparkSQL
     """
-    assert type(in_arr) is np.ndarray, "Only works for NDArrays"
+
+    assert isinstance(in_arr, np.ndarray), "Only works for NDArrays"
     for (dtype, stype) in _sq_conv_map.items():
         if dtype == in_arr.dtype:
             base_type = stype()  # instantiate
@@ -175,9 +188,10 @@ read_dicom_slice_udf = F.udf(lambda x: dicom_simple_read(x).pixel_array.tolist()
 
 def _np_to_uri(in_array, cmap='RdBu'):
     """
+    Convert a numpy array to a data URI with a png inside
 
-    _np_to_uri(np.zeros((100,100))
-    >>> 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUElEQVR4nO3SQQEAEADAQBQRT/8ExPDYXYI9Ns/Yd5C1fgfwlwHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxDxypAoX8C2RlAAAAAElFTkSuQmCC'
+    >>> _np_to_uri(np.zeros((100,100)))
+    'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUElEQVR4nO3SQQEAEADAQBQRT/8ExPDYXYI9Ns/Yd5C1fgfwlwHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxDxypAoX8C2RlAAAAAElFTkSuQmCC'
     """
     test_img_data = np.array(in_array).astype(np.float32)
     test_img_data -= test_img_data.mean()

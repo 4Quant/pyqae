@@ -4,6 +4,7 @@ from glob import glob
 from collections import namedtuple
 import os
 
+
 DicomSlice = namedtuple('DicomSlice',['PixelSpacing','SliceLocation','SliceThickness','pixel_array'])
 
 def read_dicom_slice(file_name):
@@ -28,3 +29,5 @@ def read_dicom_tensor(file_list):
     all_slices = read_dicom_list(file_list)
     return DicomSlice(all_slices[0].PixelSpacing, all_slices[0].SliceLocation, all_slices[0].SliceThickness,
                       np.stack([np.expand_dims(cslice.pixel_array,0) for cslice in all_slices]))
+
+

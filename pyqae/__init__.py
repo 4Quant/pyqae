@@ -6,19 +6,6 @@ from io import BytesIO, StringIO
 import os
 
 try:
-    # These are only available inside of the pyspark application (using py4j)
-    from pyspark.sql import Row
-    from pyspark.rdd import RDD
-    from pyspark import SparkContext
-    from pyspark.sql import SQLContext
-except ImportError:
-    print("Pyspark is not available using simplespark backend instead")
-    from .simplespark import Row
-    from .simplespark import LocalRDD as RDD
-    from .simplespark import LocalSparkContext as SparkContext
-    from .simplespark import LocalSQLContext as SQLContext
-
-try:
     from dicom import read_file as read_dicom_file
 except:
     def read_dicom_file(*args, **kwargs):

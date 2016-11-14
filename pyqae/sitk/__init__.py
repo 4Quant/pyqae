@@ -5,20 +5,56 @@ import os
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import numpy as np
+import warnings
+from typing import Dict
 
 try:
     from pyspark.sql import Row
     from pyspark.rdd import RDD
 except ImportError:
-    print("Pyspark is not available using simplespark backend instead")
-    from ..simplespark import Row
-    from ..simplespark import LocalRDD as RDD
+    warnings.warn("Pyspark is not available using simplespark backend instead", ImportWarning)
+    from pyqae.simplespark import Row
+    from pyqae.simplespark import LocalRDD as RDD
+
+_tag_lookup_dict = {} # type: Dict[str, int]
+
+try:
+    from dicom._dicom_dict import DicomDictionary as __tag_dict
+    _tag_lookup_dict = __tag_dict
+except ImportError:
+    warnings.warn("Pydicom library is not available header conversion is will not be available", ImportWarning)
+
+
+def _try_to_hex(ckey):
+    # type: (str) -> int
+    try:
+        return int('0x{}{}'.format(*ckey.split('|')),0)
+    except:
+        return -1
+
+
+def tag_lookup(ckey):
+    # type: (str) -> str
+    """
+    A function for looking up tag names from the SimpleITK metadata tagging keys
+
+    >>> assert tag_lookup('0008|0005') == 'SpecificCharacterSet', "Cant find simple code"
+    >>> assert tag_lookup('bob') == 'bob', "Bob is simply bob"
+    """
+    return _tag_lookup_dict.get(_try_to_hex(ckey), [0,0,0,0,ckey])[4]
+
+
 
 class ITKImage(object):
     """
     A nicer, pythonic wrapper for the ITK data which can be serialized by spark and used for DataFrames easily
     """
-    def __init__(self, metadata, itkdata, array, verbose = False):
+    def __init__(self,
+                 metadata, # type: Dict[str, str]
+                 itkdata, # type: Dict[str, Any]
+                 array, # type: np.ndarray
+                 verbose = False # type: bool
+                 ):
         """
         Create an ITK image from meta and array information
         :param metadata: Dict[(str, object)] the metadata information put in the Metadata dict
@@ -37,6 +73,14 @@ class ITKImage(object):
         return sitk.Image(self.itkdata['itk_Size'],
                           self.itkdata['itk_PixelID'],
                           self.itkdata['itk_NumberOfComponentsPerPixel'])
+
+    @property
+    def dicomdata(self):
+        """
+        Dictionary with the keys replaced with DICOM data
+        :return: Dict[(str,_)]
+        """
+        return {tag_lookup(ckey): cval for ckey, cval in self.metadata.copy().items()}
 
     def create_image(self):
         """
@@ -78,15 +122,22 @@ class ITKImage(object):
         """
         return sitk.WriteImage(self.create_image(), path, useCompression)
 
+    def __repr__(self):
+        return "<{cname} Size:{itk_Size} Type:{itk_PixelIDTypeAsString}>".format(cname = self.__class__.__name__, **self.itkdata)
+
+
+    @staticmethod
+    @property
+    def _get_validate_fields():
+        return """array, array_dtype, itk_Depth, itk_Dimension,
+        itk_Direction, itk_Height, itk_NumberOfComponentsPerPixel,
+        itk_Origin, itk_PixelID, itk_PixelIDTypeAsString,
+        itk_PixelIDValue, itk_Size, itk_Spacing, itk_Width""".replace("\n", "").replace(" ", "")
 
     @staticmethod
     def _has_fields(in_fields):
-        field_to_check = """array, array_dtype, itk_Depth, itk_Dimension,
-        itk_Direction, itk_Height, itk_NumberOfComponentsPerPixel,
-        itk_Origin, itk_PixelID, itk_PixelIDTypeAsString,
-        itk_PixelIDValue, itk_Size, itk_Spacing, itk_Width"""
 
-        field_to_check.replace("\n", "").replace(" ", "")
+        field_to_check = ITKImage._get_validate_fields
         for cfield in field_to_check.split(","):
             assert cfield in in_fields, "DataFrame is missing column:{}, {}".format(cfield, in_fields)
 
@@ -324,3 +375,7 @@ def show_itk_image3d(img, xslices=[], yslices=[], zslices=[], title=None, margin
                 img_comps.append(sitk.Tile(img_slices_c, [maxlen,d]))
             img = sitk.Compose(img_comps)
     return show_itk_image(img, title, margin, dpi)
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod(verbose=True)

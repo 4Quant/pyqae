@@ -4,6 +4,7 @@ from bolt import array as bt_array
 from PIL import Image as PImg
 import numpy as np
 import warnings
+from typing import List
 
 from .. import Row, RDD
 
@@ -66,7 +67,7 @@ class LazyImagePillowBackend(LazyImageBackend):
         return self.open_image().size
 
 
-backends = [LazyImagePillowBackend]
+backends = [LazyImagePillowBackend] # type: List[LazyImageBackend]
 try:
     from osgeo import gdal
 

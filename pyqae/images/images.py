@@ -73,8 +73,8 @@ class Images(Data):
             Amount of padding along each dimensions for blocks. If an int, then
             the same amount of padding is used for all dimensions
         """
-        from thunder.blocks.blocks import Blocks
-        from thunder.blocks.local import LocalChunks
+        from pyqae.blocks.blocks import Blocks
+        from pyqae.blocks.local import LocalChunks
 
         if self.mode == 'spark':
             if chunk_size is 'auto':
@@ -120,10 +120,10 @@ class Images(Data):
         """
         Convert to local mode.
         """
-        from thunder.images.readers import fromarray
+        from pyqae.images.readers import fromarray
 
         if self.mode == 'local':
-            logging.getLogger('thunder').warn('images already in local mode')
+            logging.getLogger('pyqae').warn('images already in local mode')
             pass
 
         return fromarray(self.toarray())
@@ -132,10 +132,10 @@ class Images(Data):
         """
         Convert to distributed spark mode.
         """
-        from thunder.images.readers import fromarray
+        from pyqae.images.readers import fromarray
 
         if self.mode == 'spark':
-            logging.getLogger('thunder').warn('images already in spark mode')
+            logging.getLogger('pyqae').warn('images already in spark mode')
             pass
 
         if engine is None:
@@ -429,7 +429,7 @@ class Images(Data):
             along each dimension.
         """
 
-        from thunder.images.readers import fromarray, fromrdd
+        from pyqae.images.readers import fromarray, fromrdd
         from numpy import corrcoef, concatenate
 
         nimages = self.shape[0]
@@ -487,7 +487,7 @@ class Images(Data):
         overwrite : bool
             If true, the directory given by path will first be deleted if it exists.
         """
-        from thunder.images.writers import topng
+        from pyqae.images.writers import topng
         # TODO add back colormap and vmin/vmax
         topng(self, path, prefix=prefix, overwrite=overwrite)
 
@@ -509,7 +509,7 @@ class Images(Data):
         overwrite : bool
             If true, the directory given by path will first be deleted if it exists.
         """
-        from thunder.images.writers import totif
+        from pyqae.images.writers import totif
         # TODO add back colormap and vmin/vmax
         totif(self, path, prefix=prefix, overwrite=overwrite)
 
@@ -530,7 +530,7 @@ class Images(Data):
         overwrite : bool
             If true, the directory given by path will first be deleted if it exists.
         """
-        from thunder.images.writers import tobinary
+        from pyqae.images.writers import tobinary
         tobinary(self, path, prefix=prefix, overwrite=overwrite)
 
     def map_as_series(self, func, value_size=None, dtype=None, chunk_size='auto'):

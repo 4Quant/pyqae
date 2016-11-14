@@ -7,7 +7,7 @@ def topng(images, path, prefix="image", overwrite=False, credentials=None):
 
     See also
     --------
-    thunder.data.images.topng
+    pyqae.data.images.topng
     """
     value_shape = images.value_shape
     if not len(value_shape) in [2, 3]:
@@ -16,7 +16,7 @@ def topng(images, path, prefix="image", overwrite=False, credentials=None):
 
     from scipy.misc import imsave
     from io import BytesIO
-    from thunder.writers import get_parallel_writer
+    from pyqae.writers import get_parallel_writer
 
     def tobuffer(kv):
         key, img = kv
@@ -34,7 +34,7 @@ def totif(images, path, prefix="image", overwrite=False, credentials=None):
 
     See also
     --------
-    thunder.data.images.totif
+    pyqae.data.images.totif
     """
     value_shape = images.value_shape
     if not len(value_shape) in [2, 3]:
@@ -43,7 +43,7 @@ def totif(images, path, prefix="image", overwrite=False, credentials=None):
 
     from tifffile import imsave
     from io import BytesIO
-    from thunder.writers import get_parallel_writer
+    from pyqae.writers import get_parallel_writer
 
     def tobuffer(kv):
         key, img = kv
@@ -61,9 +61,9 @@ def tobinary(images, path, prefix="image", overwrite=False, credentials=None):
 
     See also
     --------
-    thunder.data.images.tobinary
+    pyqae.data.images.tobinary
     """
-    from thunder.writers import get_parallel_writer
+    from pyqae.writers import get_parallel_writer
 
     def tobuffer(kv):
         key, img = kv
@@ -78,7 +78,7 @@ def config(path, shape, dtype, name="conf.json", overwrite=True, credentials=Non
     """
     Helper function to write a JSON file with configuration for binary image data.
     """
-    from thunder.writers import get_file_writer
+    from pyqae.writers import get_file_writer
 
     writer = get_file_writer(path)
 

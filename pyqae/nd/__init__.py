@@ -8,7 +8,8 @@ from numpy import stack
 import os
 from skimage.io import imsave
 
-def meshgridnd_like(in_img, rng_func = range):
+def meshgridnd_like(in_img, # type: ndarray
+                    rng_func = range):
     """
     Makes a n-d meshgrid in the shape of the input image
     """
@@ -18,15 +19,29 @@ def meshgridnd_like(in_img, rng_func = range):
     return np.meshgrid(*all_range)
 
 
-def filt_tensor(image_stack, filter_op, tile_size=(128, 128), padding=(0, 0), *filter_args, **filter_kwargs):
+def filt_tensor(image_stack, # type: ndarray
+                filter_op, # type: (ndarray) -> ndarray
+                tile_size=(128, 128),
+                padding=(0, 0),
+                *filter_args,
+                **filter_kwargs):
     """
     Run an operation on a 4D tensor object (image_number, width, height, channel)
-    :param image_stack: a 4D distributed image
-    :param filter_op: the operation to apply to 2D slices (width x height) for each channel
-    :param tile_size: the size of the tiles to cut
-    :param padding: the padding around the border
-    :param filter_args: arguments to pass to the filter_op
-    :param filter_kwargs: keyword arguments to pass to filter_op
+
+    Parameters
+    ----------
+    image_stack : ndarray
+        a 4D distributed image
+    filter_op : (ndarray) -> ndarray
+        the operation to apply to 2D slices (width x height) for each channel
+    tile_size : (int, int)
+        the size of the tiles to cut
+    padding : (int, int)
+        the padding around the border
+    filter_args :
+        arguments to pass to the filter_op
+    filter_kwargs :
+        keyword arguments to pass to filter_op
     :return: a 4D tensor object of the same size
     """
 
@@ -39,9 +54,14 @@ def filt_tensor(image_stack, filter_op, tile_size=(128, 128), padding=(0, 0), *f
     return filt_img.unchunk()
 
 
-def tensor_from_rdd(in_rdd, extract_array = lambda x: x[1], sort_func = None, make_idx = None):
+def tensor_from_rdd(in_rdd, # type: RDD
+                    extract_array = lambda x: x[1], # type: (Any) -> ndarray
+                    sort_func = None, # type: (Any) -> int
+                    make_idx = None # type: (Any) -> int
+                    ):
     """
     Create a tensor object from an RDD of images
+
     :param in_rdd: the RDD to process
     :param extract_array: the function to extract the array from the rdd (typically take the value, but some cases (ie dataframe) require more work
     :param sort_func: the function to sort by (leave none for no sorting)
@@ -58,12 +78,18 @@ def tensor_from_rdd(in_rdd, extract_array = lambda x: x[1], sort_func = None, ma
     return fromrdd(zip_rdd, dims = val.shape, dtype = val.dtype)
 
 
-def fromrdd(rdd, dims=None, nrecords=None, dtype=None, ordered=False):
+def fromrdd(rdd,
+            dims=None, # type: (int, int, int)
+            nrecords=None, # type: int
+            dtype=None, # type: np.dtype
+            ordered=False
+            ):
     """
     Load images from a RDD.
     Input RDD must be a collection of key-value pairs
     where keys are singleton tuples indexing images,
     and values are 2d or 3d ndarrays.
+
     Parameters
     ----------
     rdd : SparkRDD

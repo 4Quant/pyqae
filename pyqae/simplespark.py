@@ -2,15 +2,40 @@ import time
 import inspect
 from itertools import chain
 from .utils import TypeTool
+from typing import List, Any, Dict, Optional, Iterable
 
 append_dict = lambda i_dict, **kwargs: dict(list(i_dict.items()) + list(kwargs.items()))
+#TODO fix type type : (Dict[str, Any]) -> Dict[str, Any]
 append_dict_raw = lambda i_dict, o_dict: dict(list(i_dict.items()) + list(o_dict.items()))
+#TODO fix type type : (Dict[str, Any], Dict[str, Any]) -> Dict[str, Any]
 cflatten = lambda x: list(chain(*x))
 from collections import defaultdict
 import warnings
 
 class LocalRDD(object):
-    def __init__(self, items, prev, command, code='', calc_time=None, verbose = False, **args):
+    """
+    A simple, non-lazy version of the RDD from pyspark for testing purposes
+
+    >>> a = LocalSparkContext().parallelize([1,2,3,4])
+    >>> a.first()
+    1
+    >>> a.map(lambda x: x+1).first()
+    2
+    >>> a.groupBy(lambda x: x % 2).first()
+    (0, [2, 4])
+    >>> a.flatMap(lambda x: range(x)).count()
+    10
+    >>>
+
+    """
+    def __init__(self,
+                 items, # type: Iterable[Any]
+                 prev, # type: LocalRDD
+                 command, # type: str
+                 code='', # type: str
+                 calc_time=None, # type: Optional[float]
+                 verbose = False,
+                 **args):
         self.items = list(items)
         self.prev = prev
         self.command_args = (command, args)
@@ -69,6 +94,14 @@ class LocalRDD(object):
                                    [[(k, y) for y in apply_func(v)] for (k, v) in x_list]))
 
     def groupBy(self, apply_func):
+        """
+
+        :param apply_func:
+        :return:
+
+        >>> LocalSparkContext().parallelize([1,2,3,4]).groupBy(lambda x: x % 2).first()
+        (0, [2, 4])
+        """
         def gb_func(x_list):
             o_dict = defaultdict(list)
             for i in x_list:
@@ -125,6 +158,11 @@ class LocalRDD(object):
 class LocalSparkContext(object):
     """
     A fake spark context for testing/debugging purposes
+
+    >>> a = LocalSparkContext()
+    >>> b = a.parallelize([1,2,3,4])
+    >>> b.first()
+    1
     """
     def __init__(self, verbose = False):
         self.verbose = verbose
@@ -191,3 +229,41 @@ class FieldSelector(object):
         return self.__repr__()
 
 Row = lambda **kwargs: dict(kwargs)
+
+# type tools from SparkSQL
+_infer_type = lambda *args, **kwargs: None
+_has_nulltype = lambda *args, **kwargs: False
+
+class F(object):
+    @staticmethod
+    def udf(func, *args, **kwargs):
+        return func
+
+class sq_types(object):
+    @staticmethod
+    def StructType(*args, **kwargs):
+        return dict()
+
+    @staticmethod
+    def MapType(*args, **kwargs):
+        return sq_types.StructType(*args, **kwargs)
+
+    @staticmethod
+    def DoubleType(*args, **kwargs):
+        return sq_types.StructType(*args, **kwargs)
+
+    @staticmethod
+    def FloatType(*args, **kwargs):
+        return sq_types.DoubleType(*args, **kwargs)
+
+    @staticmethod
+    def IntegerType(*args, **kwargs):
+        return sq_types.DoubleType(*args, **kwargs)
+
+    @staticmethod
+    def ArrayType(*args, **kwargs):
+        return sq_types.StructType(*args, **kwargs)
+
+    @staticmethod
+    def StringType(*args, **kwargs):
+        return sq_types.StructType(*args, **kwargs)

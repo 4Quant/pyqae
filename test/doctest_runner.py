@@ -1,0 +1,19 @@
+"""
+doctests are significantly easier to run and maintain than the standard images
+
+"""
+if __name__ == "__main__":
+    import doctest
+    from pyqae import sitk
+    doctest.testmod(sitk, verbose=True)
+
+    from pyqae.dnn import viz
+    doctest.testmod(viz, verbose=True)
+
+    from pyqae import simplespark
+    doctest.testmod(simplespark)
+
+    from pyqae import med
+    doctest.testmod(med, verbose=True)
+
+    import mypy
