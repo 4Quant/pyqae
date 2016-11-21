@@ -1,5 +1,10 @@
 import marshal, types, json, inspect
 import numpy as np
+import sys
+import os
+import h5py
+import json
+from tempfile import NamedTemporaryFile
 
 STD_IMPORT_CODE =  """from keras import backend as K
 from keras.models import Model
@@ -106,13 +111,10 @@ def write_msh_model(file_path, in_model, model_fcns, model_fcn_name = None, in_p
             weight_dict[ilayer.name] = [i,[cw.tolist() for cw in ilayer.get_weights()]]
         marshal.dump(weight_dict,wf)
     if make_json:
-        out_dict = {}
-        out_dict['imp_code'] = STD_IMPORT_CODE
-        out_dict['model_fcn_name'] = model_fcn_name
-        out_dict['model_fcns'] = [(cfunc.func_name, inspect.getsourcelines(cfunc)) for cfunc in model_fcns]
-        out_dict['in_preproc_fun'] = inspect.getsourcelines(in_preproc_fun)
-        out_dict['weights'] = weight_dict
-        out_dict['config'] = in_model.get_config()
+        out_dict = {'imp_code': STD_IMPORT_CODE, 'model_fcn_name': model_fcn_name,
+                    'model_fcns': [(cfunc.func_name, inspect.getsourcelines(cfunc)) for cfunc in model_fcns],
+                    'in_preproc_fun': inspect.getsourcelines(in_preproc_fun), 'weights': weight_dict,
+                    'config': in_model.get_config()}
         with open('{}.json'.format(file_path),'w') as wf:
             json.dump(out_dict, wf, cls = NumpyAwareJSONEncoder)
 
@@ -177,12 +179,6 @@ def build_msh_model(file_path, in_shape = (1,3,128,128), allow_mismatch = False)
             print(mis_msg)
     return ImageModel(c_model, preproc_fun)
 
-import sys
-import os
-import h5py
-import numpy as np
-import json
-from tempfile import NamedTemporaryFile
 
 class NetEncoder(object):
     """Encoder class.
@@ -220,6 +216,7 @@ class NetEncoder(object):
                 g = f[layer_name]
                 weight_names = [n.decode('utf8') for n in g.attrs['weight_names']]
                 if len(weight_names):
+                    # noinspection PyDictCreation
                     for weight_name in weight_names:
                         meta = {}
                         meta['layer_name'] = layer_name

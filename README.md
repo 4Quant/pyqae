@@ -41,9 +41,11 @@ Once you have a running cluster with a valid `SparkContext` — this is created 
 
 ## using notebooks with pyspark
 
+```bash
+PYSPARK_PYTHON=/Volumes/MacHD/anaconda/bin/python PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS="notebook --ip 0.0.0.0" /Volumes/MacHD/Applications/spark-2.0.0-bin-hadoop2.7/bin/pyspark --driver-memory 8g --master local[8]
 ```
-PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS=notebook /Volumes/ExDisk/spark-2.0.0-bin-hadoop2.7/bin/pyspark
 # or the old version
+```bash
 PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS=notebook /Volumes/ExDisk/spark-2.0.0-bin-hadoop2.7/bin/pyspark
 ```
 

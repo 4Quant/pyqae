@@ -1,22 +1,14 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-import numpy as np
-import skimage.transform
-import scipy
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import os
-import matplotlib.pyplot as plt # plotting
-from skimage.io import imread # read in images
-from skimage.segmentation import mark_boundaries # mark labels
-from sklearn.metrics import roc_curve, auc # roc curve tools
-from skimage.color import label2rgb
-import numpy as np # linear algebra / matrices
-from skimage.util.montage import montage2d
+from __future__ import absolute_import, division, print_function
 
-from scipy.stats import norm
+import matplotlib.pyplot as plt # plotting
+import numpy as np # linear algebra / matrices
 from scipy import ndimage
+from skimage.restoration import denoise_tv_chambolle
+
+try:
+    from tqdm import tqdm
+except:
+    tqdm = lambda x: x
 
 
 def comp_images(old_ds,new_ds,z_slice = 0):

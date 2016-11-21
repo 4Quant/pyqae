@@ -1,9 +1,10 @@
 # Tools for ND data processing 
 from bolt.spark.array import BoltArraySpark as raw_array
 from bolt.spark.construct import ConstructSpark as cs
-from .. import Row
+from pyqae.backend import Row, RDD
 sp_array = cs.array
 import numpy as np
+from numpy import ndarray
 from numpy import stack
 import os
 from skimage.io import imsave

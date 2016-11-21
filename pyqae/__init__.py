@@ -1,9 +1,10 @@
 from __future__ import absolute_import, division, print_function
-import numpy as np
-from skimage.io import imread
-import pandas as pd
-from io import BytesIO, StringIO
+
 import os
+from io import BytesIO, StringIO
+
+import pandas as pd
+from skimage.io import imread
 
 try:
     from dicom import read_file as read_dicom_file
@@ -23,6 +24,7 @@ def _setup():
 _setup()
 
 from glob import glob
+from pyqae.backend import SparkContext, SQLContext
 
 __version__ = '0.2'
 

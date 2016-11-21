@@ -6,7 +6,7 @@ import numpy as np
 import warnings
 from typing import List
 
-from .. import Row, RDD
+from pyqae.backend import Row, RDD
 
 
 class LazyImageBackend(object):

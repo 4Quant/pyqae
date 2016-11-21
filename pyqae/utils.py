@@ -4,6 +4,9 @@ from glob import glob
 import json
 import numpy as np
 
+
+
+
 class TypeTool(object):
     """
     For printing type outputs with a nice format
@@ -58,6 +61,131 @@ def _fix_col_names(t_prev_df, rep_char = ""):
         new_df = new_df.withColumnRenamed(col, new_col)
     return new_df
 
+
+from queue import Queue, Empty as queueEmpty
+from threading import Thread
+from itertools import chain
+
+
+def pqueue_map(in_func, in_plist, threads=None):
+    in_list = [x for x in in_plist]
+    q_in = Queue(len(in_list))
+    q_out = Queue(len(in_list))
+    threads = len(in_list) if threads is None else threads
+
+    def _ex_fun():
+        while True:
+            try:
+                x = q_in.get(block=False)
+                q_out.put(in_func(x))
+                q_in.task_done()
+            except queueEmpty:
+                break
+
+    for x in in_list:
+        q_in.put(x)
+    # start threads
+    r_threads = [Thread(target=_ex_fun) for i in range(threads)]
+    _ = list(map(lambda t: t.start(), r_threads))
+
+    q_in.join()
+    _ = [t.join() for t in r_threads]
+    out_list = [q_out.get_nowait() for _ in range(0, q_out.qsize())]
+    return out_list
+
+
+def pqueue_flatmap(in_func, in_list, threads=None):
+    out_res = chain(*pqueue_map(in_func, in_list))
+    return list(out_res)
+
+
+def pqueue_flatmapvalues(in_func, in_plist, threads=None):
+    in_list = [x for x in in_plist]
+    q_in = Queue(len(in_list))
+    q_out = Queue(len(in_list))
+    threads = len(in_list) if threads is None else threads
+
+    def _ex_fun():
+        while True:
+            try:
+                in_key, in_val = q_in.get(block=False)
+                q_out.put([(in_key, pval) for pval in in_func(in_val)])
+                q_in.task_done()
+            except queueEmpty:
+                break
+
+    # populate queue
+    for x in in_list:
+        q_in.put(x)
+    # start threads
+    r_threads = [Thread(target=_ex_fun) for i in range(threads)]
+    _ = list(map(lambda t: t.start(), r_threads))
+    # join threads
+    _ = [t.join() for t in r_threads]
+
+    # make outputs
+    out_list = []
+    for _ in range(0, q_out.qsize()):
+        out_list += q_out.get_nowait()
+    return out_list
+
+
+def show_partition_sizes(in_rdd):
+    return in_rdd.mapPartitionsWithIndex(lambda i, x_list: [[(i, len(list(x_list)))]]).collect()
+
+
+def threaded_map(in_rdd, in_operation, threads_per_worker=None):
+    """
+    Run an io-bound map operation on multiple threads using queue and thread in python
+
+    :param in_rdd:
+    :param in_operation: the command to run
+    :param threads_per_worker: number of threads to run on each worker (default is unlimited)
+    :return:
+    """
+
+    if threads_per_worker == 1: return in_rdd.map(in_operation)
+
+    def _part_flatmap(x_list):
+        return pqueue_map(in_operation, x_list, threads=threads_per_worker)
+
+    return in_rdd.mapPartitions(_part_flatmap)
+
+
+def threaded_flatmap(in_rdd, in_operation, threads_per_worker=None):
+    """
+    Run an io-bound flatmap operation on multiple threads using queue and thread in python
+
+    :param in_rdd:
+    :param in_operation: the command to run
+    :param threads_per_worker: number of threads to run on each worker (default is unlimited)
+    :return:
+    """
+
+    if threads_per_worker == 1: return in_rdd.flatMap(in_operation)
+
+    def _part_flatmap(x_list):
+        return pqueue_flatmap(in_operation, x_list, threads=threads_per_worker)
+
+    return in_rdd.mapPartitions(_part_flatmap)
+
+
+def threaded_flatmapvalues(in_rdd, in_operation, threads_per_worker=None):
+    """
+    Run an io-bound flatmap operation on multiple threads using queue and thread in python
+
+    :param in_rdd:
+    :param in_operation: the command to run
+    :param threads_per_worker: number of threads to run on each worker (default is unlimited)
+    :return:
+    """
+
+    if threads_per_worker == 1: return in_rdd.flatMapValues(in_operation)
+
+    def _part_flatmapvalues(x_list):
+        return pqueue_flatmapvalues(in_operation, x_list, threads=threads_per_worker)
+
+    return in_rdd.mapPartitions(_part_flatmapvalues)
 
 class NumpyAwareJSONEncoder(json.JSONEncoder):
     """

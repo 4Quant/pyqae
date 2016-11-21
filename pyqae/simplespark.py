@@ -1,7 +1,7 @@
 import time
 import inspect
 from itertools import chain
-from .utils import TypeTool
+from pyqae.utils import TypeTool
 from typing import List, Any, Dict, Optional, Iterable
 
 append_dict = lambda i_dict, **kwargs: dict(list(i_dict.items()) + list(kwargs.items()))
@@ -11,6 +11,7 @@ append_dict_raw = lambda i_dict, o_dict: dict(list(i_dict.items()) + list(o_dict
 cflatten = lambda x: list(chain(*x))
 from collections import defaultdict
 import warnings
+from typing import List
 
 class LocalRDD(object):
     """
@@ -25,12 +26,13 @@ class LocalRDD(object):
     (0, [2, 4])
     >>> a.flatMap(lambda x: range(x)).count()
     10
-    >>>
+    >>> a.filter(lambda x: x<=2).collect()
+    [1, 2]
 
     """
     def __init__(self,
                  items, # type: Iterable[Any]
-                 prev, # type: LocalRDD
+                 prev, # type: List[LocalRDD]
                  command, # type: str
                  code='', # type: str
                  calc_time=None, # type: Optional[float]
@@ -50,6 +52,23 @@ class LocalRDD(object):
 
     def collect(self):
         return self.items
+
+    def take(self, cnt):
+        """
+        take a subregion of an RDD
+        :param cnt:
+        :return:
+
+        >>> LocalSparkContext().parallelize([1,2,3,4]).take(2)
+        [1,2]
+        >>> LocalSparkContext().parallelize([1,2,3,4]).take(-1)
+        AssertionError: Count must be greater than 0, -1 requested
+        >>> LocalSparkContext().parallelize([1,2,3,4]).take(5)
+        AssertionError: RDD does not have enough elements, 5 requested, 4 available
+        """
+        assert cnt>0, "Count must be greater than 0, {} requested".format(cnt)
+        assert cnt<=self.count(), "RDD does not have enough elements, {} requested, {} available".format(cnt, self.count())
+        return self.collect()[:cnt]
 
     def count(self):
         return len(self.items)
@@ -111,6 +130,19 @@ class LocalRDD(object):
         return self._transform('groupBy', apply_func,
                                lapply_func=gb_func)
 
+    def sortBy(self, sort_fun):
+        """
+        Run a sort using the given function to run the sort
+        :param sort_fun:
+        :return:
+
+        >>> LocalSparkContext().parallelize([1,2,3,4]).sortBy(lambda x: -x).first()
+        4
+
+        """
+        return self._transform('sortBy', sort_fun,
+                                   lapply_func=lambda x_list: sorted(x_list, key = sort_fun))
+
     def filter(self, apply_func):
         return self._transform('filter', apply_func,
                                lapply_func=lambda x_list: filter(apply_func, x_list))
@@ -126,6 +158,13 @@ class LocalRDD(object):
     def partitionBy(self, *args, **kwargs):
         warnings.warn("Partitioning not really supported yet", RuntimeWarning)
         return self
+
+    def cache(self):
+        warnings.warn("Caching not really (or fully) supported yet", RuntimeWarning)
+        return self
+
+    def persist(self, *args, **kwargs):
+        return self.cache()
 
     def mapPartitions(self, apply_func):
         warnings.warn("Partitioning not really supported yet", RuntimeWarning)
@@ -170,6 +209,33 @@ class LocalSparkContext(object):
 
     def parallelize(self, in_list, parts = 1, **kwargs):
         return LocalRDD(in_list, [], 'parallelize', in_list=in_list, verbose = self.verbose)
+
+    def accumulator(self, def_val):
+        """
+
+        :param def_val:
+        :return:
+
+        >>> a = LocalSparkContext().accumulator(5)
+        >>> a.value
+        5
+        >>> a.add(2.0)
+        >>> a.value
+        7.0
+        >>> a.add(-1)
+        >>> a.value
+        6.0
+        """
+        return Accumulator(def_val)
+
+class Accumulator(object):
+    def __init__(self, def_val = 0):
+        self._val = def_val
+    def add(self, ival):
+        self._val+=ival
+    @property
+    def value(self):
+        return self._val
 
 class LocalSQLContext(object):
     """

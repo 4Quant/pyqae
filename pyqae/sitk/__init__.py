@@ -6,7 +6,7 @@ import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
-from typing import Dict
+from typing import Dict, Any
 
 try:
     from pyspark.sql import Row
@@ -23,7 +23,7 @@ try:
     _tag_lookup_dict = __tag_dict
 except ImportError:
     warnings.warn("Pydicom library is not available header conversion is will not be available", ImportWarning)
-
+    __tag_dict = {} # just to make pycharm happy
 
 def _try_to_hex(ckey):
     # type: (str) -> int
@@ -129,16 +129,17 @@ class ITKImage(object):
     @staticmethod
     @property
     def _get_validate_fields():
+        # type: () -> List[str]
         return """array, array_dtype, itk_Depth, itk_Dimension,
         itk_Direction, itk_Height, itk_NumberOfComponentsPerPixel,
         itk_Origin, itk_PixelID, itk_PixelIDTypeAsString,
-        itk_PixelIDValue, itk_Size, itk_Spacing, itk_Width""".replace("\n", "").replace(" ", "")
+        itk_PixelIDValue, itk_Size, itk_Spacing, itk_Width""".replace("\n", "").replace(" ", "").split(",")
 
     @staticmethod
     def _has_fields(in_fields):
 
         field_to_check = ITKImage._get_validate_fields
-        for cfield in field_to_check.split(","):
+        for cfield in field_to_check:
             assert cfield in in_fields, "DataFrame is missing column:{}, {}".format(cfield, in_fields)
 
     @staticmethod

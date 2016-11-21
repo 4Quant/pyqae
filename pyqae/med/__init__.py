@@ -4,14 +4,10 @@ Modules related to Medicine and DICOM Files
 from .. import read_dicom_file as dicom_simple_read
 
 import numpy as np
-
 import pandas as pd
-
 import dicom
 from collections import namedtuple
-
 from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
-
 
 from PIL import Image as PImage
 from matplotlib.pyplot import cm
