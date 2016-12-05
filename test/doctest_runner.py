@@ -20,4 +20,5 @@ if __name__ == "__main__":
     from pyqae import med
     doctest.testmod(med, verbose=True)
 
-    import mypy
+    from pyqae import viz
+    doctest.testmod(viz, verbose=True)

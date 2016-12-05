@@ -8,6 +8,10 @@ from numpy import ndarray
 from numpy import stack
 import os
 from skimage.io import imsave
+try:
+    from typing import List
+except ImportError:
+    print("List from typing is missing but not really needed")
 
 def meshgridnd_like(in_img, # type: ndarray
                     rng_func = range):
@@ -151,3 +155,33 @@ def tensor_to_dataframe(in_bolt_array):
 
 def save_tensor_parquet(in_bolt_array, out_path):
     return tensor_to_dataframe(in_bolt_array).write.parquet(out_path)
+
+def _dsum(carr, # type: np.ndarray
+          cax # type: int
+          ):
+    return np.sum(carr, tuple(n for n in range(carr.ndim) if n is not cax))
+
+def get_bbox(in_vol, # type: np.ndarray
+             ndim = 3, min_val = 0):
+    """
+    Calculate a bounding box around an image in every direction
+    :param in_vol: the array to look at
+    :param ndim: the number of dimensions the array has
+    :param min_val: the value it must be greater than to add
+    :return: a list of min,max pairs for each dimension
+    """
+    ax_slice = []
+    for i in range(in_vol.ndim):
+        c_dim_sum = _dsum(in_vol>min_val,i)
+        c_sl = sorted(np.where(c_dim_sum)[0])
+        ax_slice += [(c_sl[0], c_sl[-1]+1)]
+    return ax_slice
+def apply_bbox(in_vol, # type: np.ndarray
+               bbox_list # type: List[(int,int)]
+               ):
+    return in_vol.__getitem__([slice(a,b,1) for (a,b) in bbox_list])
+
+def autocrop(in_vol, # type: np.ndarray
+             min_val):
+    return apply_bbox(in_vol,get_bbox(in_vol,
+                                      min_val = min_val))

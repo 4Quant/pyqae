@@ -10,10 +10,10 @@ from collections import namedtuple
 from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
 
 from PIL import Image as PImage
-from matplotlib.pyplot import cm
 import base64
 from io import BytesIO
 from typing import Any
+from pyqae import viz
 
 type_info = namedtuple('type_info', ['inferrable', 'realtype', 'has_nulltype', 'length', 'is_complex'])
 
@@ -182,38 +182,9 @@ twod_arr_type = sq_types.ArrayType(sq_types.ArrayType(sq_types.IntegerType()))
 # numpy data is not directly supported and typed arrays must be used instead therefor we run the .tolist command
 read_dicom_slice_udf = F.udf(lambda x: dicom_simple_read(x).pixel_array.tolist(), returnType=twod_arr_type)
 
-def _np_to_uri(in_array, cmap='RdBu'):
-    """
-    Convert a numpy array to a data URI with a png inside
 
-    >>> _np_to_uri(np.zeros((100,100)))
-    'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAABUElEQVR4nO3SQQEAEADAQBQRT/8ExPDYXYI9Ns/Yd5C1fgfwlwHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxBogzQJwB4gwQZ4A4A8QZIM4AcQaIM0CcAeIMEGeAOAPEGSDOAHEGiDNAnAHiDBBngDgDxBkgzgBxDxypAoX8C2RlAAAAAElFTkSuQmCC'
-    """
-    test_img_data = np.array(in_array).astype(np.float32)
-    test_img_data -= test_img_data.mean()
-    test_img_data /= test_img_data.std()
-    test_img_color = cm.get_cmap(cmap)((test_img_data + 0.5).clip(0, 1))
-    test_img_color *= 255
-    p_data = PImage.fromarray(test_img_color.clip(0, 255).astype(np.uint8))
-    rs_p_data = p_data.resize((128, 128), resample=PImage.BICUBIC)
-    out_img_data = BytesIO()
-    rs_p_data.save(out_img_data, format='png')
-    out_img_data.seek(0) # rewind
-    return base64.b64encode(out_img_data.read()).decode("ascii").replace("\n", "")
 
-image_to_uri_udf = F.udf(_np_to_uri, returnType = sq_types.StringType())
+image_to_uri_udf = F.udf(viz._np_to_uri, returnType = sq_types.StringType())
 
-_wrap_uri = lambda data_uri: "data:image/png;base64,{0}".format(data_uri)
 
-def display_uri(uri_list):
-    """
-
-    show_uri(_np_to_uri(np.zeros((100,100))))
-
-    """
-    from IPython.display import HTML
-    out_html = ""
-    for in_uri in uri_list:
-        out_html += """<img src="{0}" width = "100px" height = "100px" />""".format(_wrap_uri(in_uri))
-    return HTML(out_html)
 
