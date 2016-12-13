@@ -119,7 +119,8 @@ def _remove_empty_columns(in_df):
 # perform conversions
 _dicom_conv_dict = {dicom.multival.MultiValue: lambda x: np.array(x).tolist(),
                     dicom.sequence.Sequence: lambda seq: [[(str(d_ele.tag), str(d_ele.value)) for d_ele in d_set] for
-                                                          d_set in seq]}
+                                                          d_set in seq],
+                    dicom.valuerep.PersonName3: lambda x: str(x)}
 
 
 def _apply_conv_dict(in_ele):

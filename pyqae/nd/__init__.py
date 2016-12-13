@@ -8,20 +8,41 @@ from numpy import ndarray
 from numpy import stack
 import os
 from skimage.io import imsave
-try:
-    from typing import List
-except ImportError:
-    print("List from typing is missing but not really needed")
+from pyqae.utils import Optional, List
 
-def meshgridnd_like(in_img, # type: ndarray
+def meshgridnd_like(in_img,
                     rng_func = range):
     """
     Makes a n-d meshgrid in the shape of the input image
+    >>> import numpy as np
+    >>> xx, yy = meshgridnd_like(np.ones((3,2)))
+    >>> xx.shape
+    (3, 2)
+    >>> xx
+    array([[0, 0],
+           [1, 1],
+           [2, 2]])
+    >>> xx[:,0]
+    array([0, 1, 2])
+    >>> yy
+    array([[0, 1],
+           [0, 1],
+           [0, 1]])
+    >>> yy[0,:]
+    array([0, 1])
+    >>> xx, yy, zz = meshgridnd_like(np.ones((2,3,4)))
+    >>> xx.shape
+    (2, 3, 4)
+    >>> xx[:,0,0]
+    array([0, 1])
+    >>> yy[0,:,0]
+    array([0, 1, 2])
+    >>> zz[0,0,:]
+    array([0, 1, 2, 3])
     """
     new_shape = list(in_img.shape)
-    fixed_shape = [new_shape[1], new_shape[0]]+new_shape[2:] if len(new_shape)>=2 else new_shape 
-    all_range = [rng_func(i_len) for i_len in fixed_shape]
-    return np.meshgrid(*all_range)
+    all_range = [rng_func(i_len) for i_len in new_shape]
+    return tuple([x_arr.swapaxes(0,1) for x_arr in np.meshgrid(*all_range)])
 
 
 def filt_tensor(image_stack, # type: ndarray
@@ -61,8 +82,8 @@ def filt_tensor(image_stack, # type: ndarray
 
 def tensor_from_rdd(in_rdd, # type: RDD
                     extract_array = lambda x: x[1], # type: (Any) -> ndarray
-                    sort_func = None, # type: (Any) -> int
-                    make_idx = None # type: (Any) -> int
+                    sort_func = None, # type: Optional[(Any) -> int]
+                    make_idx = None # type: Optional[(Any) -> int]
                     ):
     """
     Create a tensor object from an RDD of images
@@ -85,8 +106,8 @@ def tensor_from_rdd(in_rdd, # type: RDD
 
 def fromrdd(rdd,
             dims=None, # type: (int, int, int)
-            nrecords=None, # type: int
-            dtype=None, # type: np.dtype
+            nrecords=None, # type: Optional[int]
+            dtype=None, # type: Optional[np.dtype]
             ordered=False
             ):
     """
@@ -159,29 +180,82 @@ def save_tensor_parquet(in_bolt_array, out_path):
 def _dsum(carr, # type: np.ndarray
           cax # type: int
           ):
+    # type: (np.ndarray, int) -> np.ndarray
+    """
+    Sums the values along all other axes but the current
+    :param carr:
+    :param cax:
+    :return:
+
+    >>> import numpy as np
+    >>> np.random.seed(1234)
+    >>> _dsum(np.zeros((3,3)), 0).astype(np.int8)
+    array([0, 0, 0], dtype=int8)
+    >>> _dsum(np.eye(3), 1).astype(np.int8)
+    array([1, 1, 1], dtype=int8)
+    >>> _dsum(np.random.randint(0, 5, size = (3,3,3)), 0).astype(np.int8)
+    array([19, 17, 19], dtype=int8)
+    """
     return np.sum(carr, tuple(n for n in range(carr.ndim) if n is not cax))
 
-def get_bbox(in_vol, # type: np.ndarray
-             ndim = 3, min_val = 0):
+def get_bbox(in_vol,
+             min_val = 0):
+    # type: (np.ndarray, float) -> np.ndarray
     """
     Calculate a bounding box around an image in every direction
     :param in_vol: the array to look at
     :param ndim: the number of dimensions the array has
-    :param min_val: the value it must be greater than to add
+    :param min_val: the value it must be greater than to add (not equal)
     :return: a list of min,max pairs for each dimension
+
+    >>> import numpy as np
+    >>> get_bbox(np.zeros((3,3)), 0)
+    [(0, 0), (0, 0)]
+    >>> get_bbox(np.pad(np.eye(3).astype(np.int8), 1, mode = lambda *args: 0))
+    [(1, 4), (1, 4)]
     """
     ax_slice = []
     for i in range(in_vol.ndim):
-        c_dim_sum = _dsum(in_vol>min_val,i)
-        c_sl = sorted(np.where(c_dim_sum)[0])
-        ax_slice += [(c_sl[0], c_sl[-1]+1)]
+        c_dim_sum = _dsum(in_vol > min_val, i)
+        wh_idx = np.where(c_dim_sum)[0]
+        c_sl = sorted(wh_idx)
+        if len(wh_idx) == 0:
+            ax_slice += [(0, 0)]
+        else:
+            ax_slice += [(c_sl[0], c_sl[-1] + 1)]
     return ax_slice
 def apply_bbox(in_vol, # type: np.ndarray
                bbox_list # type: List[(int,int)]
                ):
     return in_vol.__getitem__([slice(a,b,1) for (a,b) in bbox_list])
 
+
 def autocrop(in_vol, # type: np.ndarray
-             min_val):
+             min_val # type: double
+             ):
+    # type (...) -> np.ndarray
+    """
+    Perform an autocrop on an image by keeping all the points above a value
+    :param in_vol:
+    :param min_val:
+    :return:
+
+    >>> import numpy as np
+    >>> np.random.seed(1234)
+    >>> autocrop(np.zeros((3,3)), 0).astype(np.bool)
+    array([], shape=(0, 0), dtype=bool)
+    >>> autocrop(np.eye(3), 0).astype(np.bool)
+    array([[ True, False, False],
+           [False,  True, False],
+           [False, False,  True]], dtype=bool)
+    >>> autocrop(np.random.randint(0, 10, size = (4,4)), 8).astype(np.int8)
+    array([[8, 9, 1],
+           [9, 6, 8],
+           [5, 0, 9]], dtype=int8)
+    >>> autocrop(np.pad(np.eye(3).astype(np.int8), 1, mode = lambda *args: 0),0)
+    array([[1, 0, 0],
+           [0, 1, 0],
+           [0, 0, 1]], dtype=int8)
+    """
     return apply_bbox(in_vol,get_bbox(in_vol,
                                       min_val = min_val))

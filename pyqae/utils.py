@@ -4,8 +4,18 @@ from glob import glob
 import json
 import numpy as np
 
+try:
+    from typing import Tuple, List, Optional, Union, Dict
+except ImportError:
+    print("List from typing is missing but not really needed")
 
+    # junk variables
+    # noinspection PyPep8Naming
+    def List():
+        raise RuntimeError("This should not be used for anything")
 
+    Tuple = List
+    Optional = List
 
 class TypeTool(object):
     """
