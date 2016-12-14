@@ -39,6 +39,14 @@ def meshgridnd_like(in_img,
     array([0, 1, 2])
     >>> zz[0,0,:]
     array([0, 1, 2, 3])
+    >>> zz
+    array([[[0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3]],
+    <BLANKLINE>
+           [[0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3]]])
     """
     new_shape = list(in_img.shape)
     all_range = [rng_func(i_len) for i_len in new_shape]
@@ -259,3 +267,57 @@ def autocrop(in_vol, # type: np.ndarray
     """
     return apply_bbox(in_vol,get_bbox(in_vol,
                                       min_val = min_val))
+
+from scipy.ndimage import zoom
+
+
+def iso_image_rescaler(t_array,  # type: np.ndarray
+                       gs_arr,  # type: List[float]
+                       res_func=lambda x: np.max(x),  # type: (np.ndarray) -> float
+                       order=0,
+                       verbose=False,
+                       **kwargs):
+    # type: (...) -> Tuple[np.ndarray, List[float]]
+    new_v_size = res_func(gs_arr)
+    scale_f = np.array(gs_arr) / new_v_size
+    if verbose: print(gs_arr, '->', new_v_size, ':', scale_f)
+    return zoom(t_array, scale_f, order=order, **kwargs), [new_v_size] * 3
+
+
+
+def change_resolution_array(in_data,  # type: np.ndarray
+                         old_vox_size, # type: List[float]
+                             new_vox_size, # type: Union[float, np.ndarray]
+                      order=0,
+                      verbose=False,
+                      **kwargs):
+    # type: (...) -> Tuple[np.array, List[float]]
+    """
+    A tool for changing the resolution of an array
+    :param in_data:
+    :param old_vox_size:
+    :param new_vox_size:
+    :param order:
+    :param verbose:
+    :param kwargs:
+    :return:
+
+    >>> import numpy as np
+    >>> change_resolution_array(np.eye(3).astype(np.int8), [1.0, 1.0], 0.5, order = 0)
+    (array([[1, 1, 0, 0, 0, 0],
+           [1, 1, 0, 0, 0, 0],
+           [0, 0, 1, 1, 0, 0],
+           [0, 0, 1, 1, 0, 0],
+           [0, 0, 0, 0, 1, 1],
+           [0, 0, 0, 0, 1, 1]], dtype=int8), [0.5, 0.5])
+    >>> change_resolution_array(np.eye(2).astype(np.int8), [1.0, 1.0], [2.0, 2.0] , order = 0)
+    (array([[1]], dtype=int8), [2.0, 2.0])
+    """
+    if isinstance(new_vox_size, list):
+        new_vox_size = np.array(new_vox_size)
+    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size]*len(old_vox_size))
+    assert len(new_v_size)==len(old_vox_size), "Voxel size and old spacing "+ \
+                                               "must have the same size {}, {}".format(new_v_size, old_vox_size)
+    scale_f = np.array(old_vox_size) / new_v_size
+    if verbose: print(old_vox_size, '->', new_v_size, ':', scale_f)
+    return zoom(in_data, scale_f, order=order, **kwargs), list(new_v_size.tolist())

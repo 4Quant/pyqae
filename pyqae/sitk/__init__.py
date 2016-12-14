@@ -377,6 +377,49 @@ def show_itk_image3d(img, xslices=[], yslices=[], zslices=[], title=None, margin
             img = sitk.Compose(img_comps)
     return show_itk_image(img, title, margin, dpi)
 
+def _get_spacing_np(in_data):
+    # type: (sitk.Image) -> np.ndarray
+    """
+    the dimensions are switched in the numpy and sitk-based representations so we manually correct it here
+    :param in_data:
+    :return:
+    """
+    # type: (sitk.Image) -> List[float]
+    gs = tuple(in_data.GetSpacing())
+    if len(gs) == 3:
+        gs = gs[2], gs[0], gs[1]
+    elif len(gs) == 2:
+        gs = gs[1], gs[0]
+    return np.array(gs)
+
+
+from scipy.ndimage import zoom
+
+def extract_custom_array(in_data,  # type: sitk.Image
+                             new_vox_size, # type: Union[float, np.ndarray]
+                      order=0,
+                      verbose=False,
+                      **kwargs):
+    # type: (...) -> Tuple[np.array, List[float]]
+    """
+    Forces the 3d array returned to be isotropic so the rendering looks correct
+    :param in_data: the sitk image to extract
+    :param new_vox_size the new voxel size
+    :param order: the interpolation to use (0-> nearest neighbor, 2 -> cubic)
+    :param verbose: print out information on sizing and changes
+    :param kwargs:
+    :return:
+    """
+
+    gs_arr = _get_spacing_np(in_data).tolist()
+    t_array = sitk.GetArrayFromImage(in_data)
+    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size]*len(gs_arr))
+    assert len(new_v_size)==len(gs_arr), "Voxel size and old spacing must have the same size {}, {}".format(new_v_size, gs_arr)
+    scale_f = np.array(gs_arr) / new_v_size
+    if verbose: print(gs_arr, '->', new_v_size, ':', scale_f)
+    return zoom(t_array, scale_f, order=order, **kwargs), list(new_v_size.tolist())
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod(verbose=True)

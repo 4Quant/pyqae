@@ -38,6 +38,10 @@ def remove_edges(in_img,
             [0, 0, 0, 0],
             [0, 0, 0, 0],
             [0, 0, 0, 0]]], dtype=int8)
+    >>> remove_edges(np.ones((3,3,3)), 0.5, False).astype(np.int8)[:,:,0]
+    array([[0, 0, 0],
+           [0, 1, 0],
+           [0, 0, 0]], dtype=int8)
     >>> remove_edges(np.ones((3,3,3)), 0.5, False).astype(np.int8)
     array([[[0, 0, 0],
             [0, 0, 0],
@@ -50,9 +54,11 @@ def remove_edges(in_img,
            [[0, 0, 0],
             [0, 0, 0],
             [0, 0, 0]]], dtype=int8)
+
     """
-    xx, yy, zz = meshgridnd_like(in_img)
+    xx, yy, zz = meshgridnd_like(in_img, rng_func=lambda n: np.linspace(-1,1,num=n))
     cdist = lambda x: np.power((x.astype(np.float32)-x.mean())/(x.max()-x.mean()),2)
+    cdist = lambda x: np.power(x,2)
     dist_img = cdist(xx)+cdist(yy)
     if sph_mode:
         dist_img += cdist(zz)

@@ -3,7 +3,7 @@ import os
 from glob import glob
 import json
 import numpy as np
-
+from tempfile import NamedTemporaryFile
 try:
     from typing import Tuple, List, Optional, Union, Dict
 except ImportError:
@@ -16,6 +16,13 @@ except ImportError:
 
     Tuple = List
     Optional = List
+
+
+
+def get_temp_filename(suffix):
+    with NamedTemporaryFile(suffix=suffix) as w:
+        return w.name
+
 
 class TypeTool(object):
     """
