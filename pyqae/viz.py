@@ -86,7 +86,7 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
     max_comp = in_bone_labels.max()
 
     rescale_func = rescale_func if rescale_func is not None else lambda x: x
-    ax_flip = lambda x: rescale_func(x)[::-1, ::-1].swapaxes(0, 2).swapaxes(0, 1)
+    ax_flip = lambda x: rescale_func(x)[::-1].swapaxes(0, 2).swapaxes(0, 1)
     for i in range(start_idx, min(max_comp, MAX_COMP_LIMIT)):
         if i == 0:
             v_img = ax_flip((in_bone_labels > 0).astype(np.float32))
@@ -110,7 +110,7 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
     ax.set_xlim(0, n_shape[0])
     ax.set_ylim(0, n_shape[1])
     ax.set_zlim(0, n_shape[2])
-    ax.view_init(45, 220)
+    ax.view_init(45, 45)
     ax.axis('off')
     return ax, fig
 

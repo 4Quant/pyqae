@@ -5,7 +5,7 @@ import json
 import numpy as np
 from tempfile import NamedTemporaryFile
 try:
-    from typing import Tuple, List, Optional, Union, Dict
+    from typing import Tuple, List, Optional, Union, Dict, Any
 except ImportError:
     print("List from typing is missing but not really needed")
 
@@ -16,6 +16,10 @@ except ImportError:
 
     Tuple = List
     Optional = List
+    Any = List
+    Union = List
+    Dict = List
+
 
 
 
