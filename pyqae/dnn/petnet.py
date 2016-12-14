@@ -22,35 +22,55 @@ from keras.layers import Cropping2D
 from keras.models import Model
 from keras.layers import Dropout, BatchNormalization
 from keras.layers import Convolution2D, MaxPooling2D, UpSampling2D
-from keras.layers import merge, Input
+from keras.layers import merge, Input, Lambda
 from collections import defaultdict
 import numpy as np
 from pyqae.utils import Tuple, List, Dict, Any
 from pyqae.dnn import fix_name_tf
 
 
-def build_nd_umodel(in_shape,  # type: Tuple[int, int]
-                    layers,  # type: int
-                    branches,  # type: List[Tuple[str, int, int]]
-                    conv_op, pool_op, upscale_op, crop_op,
-                    layer_size_fcn=lambda i: 3,
-                    pool_size=2,
-                    dropout_rate=0.0,
-                    last_layer_depth=4,
-                    crop_mode=True,
-                    use_b_conv=False,
-                    use_bn=True,
-                    verbose=False):
+def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
+                     layers,  # type: int
+                     branches,  # type: List[Tuple[str, int, int]]
+                     conv_op, pool_op, upscale_op, crop_op,
+                     layer_size_fcn=lambda i: 3,
+                     pool_size=2,
+                     dropout_rate=0.0,
+                     last_layer_depth=4,
+                     crop_mode=True,
+                     use_b_conv=False,
+                     use_b_conv_out = False, # type: Optional[bool]
+                     use_bn=True,
+                     verbose=False,
+                     single_input=False):
     border_mode = 'valid' if crop_mode else 'same'
-
+    use_b_conv_out = use_b_conv_out if use_b_conv_out is not None else use_b_conv
     x_wid, y_wid = in_shape
     branch_dict = defaultdict(lambda: dict())  # type: Dict[Dict[str, Any]]
 
-    for branch_name, branch_ch, branch_depth in branches:
-        im_shape = (branch_ch, x_wid, y_wid)
-        branch_id = fix_name_tf(branch_name)
+    input_list = []
 
-        input_im = Input(im_shape, name=branch_id)
+    def _make_input(*args, **kwargs):  # keep track of all the inputs
+        input_list.append(Input(*args, **kwargs))
+        return input_list[-1]
+
+    if single_input:
+        # this only works with theano ordering
+        full_ch_cnt = sum([branch_ch for branch_name, branch_ch, branch_depth in branches])
+        full_input = _make_input((full_ch_cnt, x_wid, y_wid))
+        in_branches = []
+        start_idx = 0
+        for branch_name, branch_ch, branch_depth in branches:
+            in_branches += [Lambda(lambda x: x[:, start_idx:(start_idx + branch_ch), :, :],
+                                   output_shape=(branch_ch, x_wid, y_wid),
+                                   name=fix_name_tf(branch_name))(full_input)]
+            start_idx += branch_ch
+    else:
+        in_branches = [_make_input((branch_ch, x_wid, y_wid), name=fix_name_tf(branch_name))
+                       for branch_name, branch_ch, branch_depth in branches]
+
+    for (branch_name, branch_ch, branch_depth), input_im in zip(branches, in_branches):
+        branch_id = fix_name_tf(branch_name)
         fmap = conv_op(branch_depth, 3, name='A {} Prefiltering'.format(branch_id), border_mode=border_mode)(input_im)
         first_layer = conv_op(branch_depth, 3, name='B {} Prefiltering'.format(branch_id), border_mode=border_mode)(
             fmap)
@@ -85,15 +105,15 @@ def build_nd_umodel(in_shape,  # type: Tuple[int, int]
             else:
                 lay_kern_wid = layer_size_fcn(ilay)
 
-            f_conv_step = conv_op(lay_depth, lay_kern_wid,
+            post_conv_step = conv_op(lay_depth, lay_kern_wid,
                                   border_mode=border_mode,
                                   name='A {} Feature Maps [{}]'.format(branch_id, ilay, lay_depth))(last_layer)
-            post_conv_step = conv_op(lay_depth, lay_kern_wid, border_mode=border_mode,
-                                     name='B {} Feature-Maps [{}]'.format(branch_id, ilay, lay_depth))(f_conv_step)
+
+            if use_b_conv: post_conv_step = conv_op(lay_depth, lay_kern_wid, border_mode=border_mode,
+                                     name='B {} Feature-Maps [{}]'.format(branch_id, ilay, lay_depth))(post_conv_step)
 
             last_layer = post_conv_step
 
-        last_img_layer = last_layer
         # remove the last layer
         if verbose: print('image layers', [i._keras_shape for i in conv_layers])
         rev_layers = list(reversed(list(zip(range(layers + 1), conv_layers[:]))))
@@ -141,12 +161,13 @@ def build_nd_umodel(in_shape,  # type: Tuple[int, int]
             cur_up = upscale_op(pool_size, name='Upsampling [{}]'.format(ilay + 1))(last_layer)
             last_layer = cur_up
 
-            if dropout_rate > 0: cur_merge = Dropout(dropout_rate,
+            if dropout_rate > 0: last_layer = Dropout(dropout_rate,
                                                      name=fix_name_tf('Random Removal [{}]'.format(ilay + 1)))(
-                cur_merge)
+                last_layer)
             a_conv = conv_op(lay_depth, 3, name='A Deconvolution [{}]'.format(ilay + 1), border_mode=border_mode)(
                 last_layer)
-            if use_b_conv:
+
+            if use_b_conv_out:
                 b_conv = conv_op(lay_depth, 3, name='B Deconvolution {}]'.format(ilay + 1), border_mode=border_mode)(
                     a_conv)
                 last_layer = b_conv
@@ -155,7 +176,8 @@ def build_nd_umodel(in_shape,  # type: Tuple[int, int]
 
     out_conv = conv_op(last_layer_depth, 1, activation='sigmoid',
                        name='Calculating Probability', border_mode=border_mode)(last_layer)
-    model = Model(input=all_inputs, output=out_conv)
+
+    model = Model(input=input_list, output=out_conv)
 
     return model
 
@@ -169,7 +191,9 @@ def build_2d_umodel(in_img,
                     last_layer_depth=1,
                     use_bn=True,
                     crop_mode=True,
-                    verbose=False
+                    use_b_conv = True,
+                    verbose=False,
+                    single_input=False
                     ):
     """
 
@@ -212,6 +236,11 @@ def build_2d_umodel(in_img,
     (1, 90, 90)
     >>> [x.output_shape[1:] for x in fat_crop_model.layers if x.name.find('Mixing')>=0]
     [(60, 13, 13), (150, 24, 24), (75, 46, 46), (45, 90, 90)]
+    >>> si_model = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest CT', 1, 8), ('PET', 2, 4)], crop_mode = True, use_bn = False, verbose = False, single_input = True)
+    >>> si_model.layers[0].output_shape[1:]
+    (3, 32, 32)
+    >>> si_model.layers[-1].output_shape[1:]
+    (1, 26, 26)
     """
     conv_op = lambda n_filters, f_width, name, activation='relu', border_mode='same', **kwargs: Convolution2D(n_filters,
                                                                                                               f_width,
@@ -226,20 +255,22 @@ def build_2d_umodel(in_img,
     upscale_op = lambda p_size, name, **kwargs: UpSampling2D(size=(p_size, p_size), name=fix_name_tf(name), **kwargs)
     crop_op = lambda crop_d, name, **kwargs: Cropping2D(cropping=((crop_d, crop_d), (crop_d, crop_d)),
                                                         name=fix_name_tf(name))
-    return build_nd_umodel(in_img.shape[2:],
-                           layers,
-                           branches=branches,
-                           conv_op=conv_op,
-                           pool_op=pool_op,
-                           upscale_op=upscale_op,
-                           crop_op=crop_op,
-                           layer_size_fcn=lsf,
-                           pool_size=pool_size,
-                           dropout_rate=dropout_rate,
-                           last_layer_depth=last_layer_depth,
-                           use_bn=use_bn,
-                           crop_mode=crop_mode,
-                           verbose=verbose)
+    return _build_nd_umodel(in_img.shape[2:],
+                            layers,
+                            branches=branches,
+                            conv_op=conv_op,
+                            pool_op=pool_op,
+                            upscale_op=upscale_op,
+                            crop_op=crop_op,
+                            layer_size_fcn=lsf,
+                            pool_size=pool_size,
+                            dropout_rate=dropout_rate,
+                            last_layer_depth=last_layer_depth,
+                            use_bn=use_bn,
+                            use_b_conv = use_b_conv,
+                            crop_mode=crop_mode,
+                            single_input=single_input,
+                            verbose=verbose)
 
 
 if __name__ == "__main__":

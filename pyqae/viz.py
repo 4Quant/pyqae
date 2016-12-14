@@ -151,6 +151,46 @@ def make_3d_animation(in_fig,  # type: plt.Figure
         return ani
 
 
+def make_stack_animation(in_stack, # type: np.ndarray
+                      frames,  # type: int
+                      fps=1,
+                      file_path=None,  # type: Optional[str]
+                      as_html=True,
+                         bounce = False,
+                         fig_size = (4,4),
+                         fig_dpi = 300,
+                         **plt_kwargs
+                      ):
+    assert len(in_stack.shape)==3, "Only 3D arrays are supported for the stack animation code"
+    _checkffmpeg()
+    in_fig, in_ax = plt.subplots(1, 1, figsize = fig_size, dpi = fig_dpi)
+    _img_ax = in_ax.imshow(in_stack[0], **plt_kwargs)
+    in_ax.axis('off')
+    frame_arr = np.linspace(0, in_stack.shape[0]-1, frames/2 if bounce else frames) # type: np.ndarray
+    if bounce:
+        frame_arr = np.array(frame_arr.tolist() + list(reversed(frame_arr)))
+
+    def _updatefig(ind):
+        _img_ax.set_array(in_stack[int(frame_arr[ind])])
+        return _img_ax
+
+    ani = animation.FuncAnimation(in_fig, _updatefig, frames=frames)
+
+
+    if file_path is None:
+        file_path = get_temp_filename('.gif')
+
+    ani.save(file_path, fps=fps, writer='imagemagick')
+    rc('animation', html='html5')
+    if as_html:
+        ani_link = ani.to_html5_video()
+        in_fig.clf()
+        plt.close('all')
+        return HTML(ani_link)
+    else:
+        return ani
+
+
 def draw_3d_label_animation(in_bone_labels,
                             frames=18,
                             fps=1,
