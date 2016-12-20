@@ -1,9 +1,11 @@
 import itertools
 import logging
 from io import BytesIO
+
 from numpy import frombuffer, prod, random, asarray, expand_dims
 
 from ..utils import check_spark, check_options
+
 spark = check_spark()
 
 
@@ -52,8 +54,10 @@ def fromrdd(rdd, dims=None, nrecords=None, dtype=None, labels=None, ordered=Fals
             k = (k,)
         return k, v
 
-    values = BoltArraySpark(rdd.map(process_keys), shape=(nrecords,) + tuple(dims), dtype=dtype, split=1, ordered=ordered)
+    values = BoltArraySpark(rdd.map(process_keys), shape=(nrecords,) + tuple(dims), dtype=dtype, split=1,
+                            ordered=ordered)
     return Images(values, labels=labels)
+
 
 def fromarray(values, labels=None, npartitions=None, engine=None):
     """
@@ -156,7 +160,9 @@ def fromlist(items, accessor=None, keys=None, dims=None, dtype=None, labels=None
             items = asarray([accessor(i) for i in items])
         return fromarray(items, labels=labels)
 
-def frompath(path, accessor=None, ext=None, start=None, stop=None, recursive=False, npartitions=None, dims=None, dtype=None, labels=None, recount=False, engine=None, credentials=None):
+
+def frompath(path, accessor=None, ext=None, start=None, stop=None, recursive=False, npartitions=None, dims=None,
+             dtype=None, labels=None, recount=False, engine=None, credentials=None):
     """
     Load images from a path using the given accessor.
 
@@ -221,7 +227,8 @@ def frompath(path, accessor=None, ext=None, start=None, stop=None, recursive=Fal
         return fromarray(values, labels=labels)
 
 
-def frombinary(path, shape=None, dtype=None, ext='bin', start=None, stop=None, recursive=False, nplanes=None, npartitions=None, labels=None, conf='conf.json', order='C', engine=None, credentials=None):
+def frombinary(path, shape=None, dtype=None, ext='bin', start=None, stop=None, recursive=False, nplanes=None,
+               npartitions=None, labels=None, conf='conf.json', order='C', engine=None, credentials=None):
     """
     Load images from flat binary files.
 
@@ -304,13 +311,13 @@ def frombinary(path, shape=None, dtype=None, ext='bin', start=None, stop=None, r
             while current_plane < ary.shape[-1]:
                 if current_plane % nplanes == 0:
                     slices = [slice(None)] * (ary.ndim - 1) + [slice(last_plane, current_plane)]
-                    yield idx*npoints + timepoint, ary[slices].squeeze()
+                    yield idx * npoints + timepoint, ary[slices].squeeze()
                     timepoint += 1
                     last_plane = current_plane
                 current_plane += 1
             # yield remaining planes
             slices = [slice(None)] * (ary.ndim - 1) + [slice(last_plane, ary.shape[-1])]
-            yield (idx*npoints + timepoint,), ary[slices].squeeze()
+            yield (idx * npoints + timepoint,), ary[slices].squeeze()
 
     recount = False if nplanes is None else True
     append = [nplanes] if (nplanes is not None and nplanes > 1) else []
@@ -320,7 +327,9 @@ def frombinary(path, shape=None, dtype=None, ext='bin', start=None, stop=None, r
                     dims=newdims, dtype=dtype, labels=labels, recount=recount,
                     engine=engine, credentials=credentials)
 
-def fromtif(path, ext='tif', start=None, stop=None, recursive=False, nplanes=None, npartitions=None, labels=None, engine=None, credentials=None, discard_extra=False):
+
+def fromtif(path, ext='tif', start=None, stop=None, recursive=False, nplanes=None, npartitions=None, labels=None,
+            engine=None, credentials=None, discard_extra=False):
     """
     Loads images from single or multi-page TIF files.
 
@@ -376,7 +385,7 @@ def fromtif(path, ext='tif', start=None, stop=None, recursive=False, nplanes=Non
                 else:
                     raise ValueError("nplanes '%d' does not evenly divide '%d in file %s'" % (nplanes, pageCount,
                                                                                               fname))
-            values = [ary[i:(i+nplanes)] for i in range(0, pageCount, nplanes)]
+            values = [ary[i:(i + nplanes)] for i in range(0, pageCount, nplanes)]
         else:
             values = [ary]
         tfh.close()
@@ -385,7 +394,7 @@ def fromtif(path, ext='tif', start=None, stop=None, recursive=False, nplanes=Non
             values = [val.squeeze() for val in values]
 
         nvals = len(values)
-        keys = [(idx*nvals + timepoint,) for timepoint in range(nvals)]
+        keys = [(idx * nvals + timepoint,) for timepoint in range(nvals)]
         return zip(keys, values)
 
     recount = False if nplanes is None else True
@@ -396,7 +405,9 @@ def fromtif(path, ext='tif', start=None, stop=None, recursive=False, nplanes=Non
         data = data.repartition(npartitions)
     return data
 
-def frompng(path, ext='png', start=None, stop=None, recursive=False, npartitions=None, labels=None, engine=None, credentials=None):
+
+def frompng(path, ext='png', start=None, stop=None, recursive=False, npartitions=None, labels=None, engine=None,
+            credentials=None):
     """
     Load images from PNG files.
 
@@ -435,6 +446,7 @@ def frompng(path, ext='png', start=None, stop=None, recursive=False, npartitions
                     stop=stop, recursive=recursive, npartitions=npartitions,
                     labels=labels, engine=engine, credentials=credentials)
 
+
 def fromrandom(shape=(10, 50, 50), npartitions=1, seed=42, engine=None):
     """
     Generate random image data.
@@ -457,6 +469,7 @@ def fromrandom(shape=(10, 50, 50), npartitions=1, seed=42, engine=None):
         return random.randn(*shape[1:])
 
     return fromlist(range(shape[0]), accessor=generate, npartitions=npartitions, engine=engine)
+
 
 def fromexample(name=None, engine=None):
     """

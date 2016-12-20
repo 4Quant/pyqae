@@ -1,5 +1,6 @@
 from numpy import prod, unravel_index
 
+
 def tobinary(series, path, prefix='series', overwrite=False, credentials=None):
     """
     Writes out data to binary format.
@@ -64,6 +65,7 @@ def tobinary(series, path, prefix='series', overwrite=False, credentials=None):
 
     write_config(path, shape=shape, dtype=dtype, overwrite=overwrite, credentials=credentials)
 
+
 def write_config(path, shape=None, dtype=None, name="conf.json", overwrite=True, credentials=None):
     """
     Write a conf.json file with required information to load Series binary data.
@@ -79,6 +81,7 @@ def write_config(path, shape=None, dtype=None, name="conf.json", overwrite=True,
 
     successwriter = writer(path, "SUCCESS", overwrite=overwrite, credentials=credentials)
     successwriter.write('')
+
 
 def getlabel(key):
     """

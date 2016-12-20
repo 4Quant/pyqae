@@ -1,16 +1,16 @@
-from numpy import array, mean, median, std, size, arange, percentile,\
+import logging
+from itertools import product
+
+from bolt.utils import tupleize
+from numpy import array, mean, median, std, size, arange, percentile, \
     asarray, zeros, corrcoef, where, unique, array_equal, delete, \
     ravel, logical_not, unravel_index, prod, random, shape, \
     dot, outer, expand_dims, ScalarType, ndarray, sqrt, pi, angle, fft, \
     roll, polyfit, polyval, ceil, float64, fix, floor
-import logging
-from itertools import product
-from bolt.utils import tupleize
 from six import string_types
-from ..utils import check_options
-
 
 from ..base import Data
+from ..utils import check_options
 
 
 class Series(Data):
@@ -72,7 +72,7 @@ class Series(Data):
 
     @property
     def baseaxes(self):
-        return tuple(range(0, len(self.shape)-1))
+        return tuple(range(0, len(self.shape) - 1))
 
     @property
     def _constructor(self):
@@ -189,7 +189,7 @@ class Series(Data):
             value_shape = len(index)
 
         if isinstance(value_shape, int):
-            values_shape = (value_shape, )
+            values_shape = (value_shape,)
         new = super(Series, self).map(func, value_shape=value_shape, dtype=dtype, with_keys=with_keys)
 
         if index is not None:
@@ -831,7 +831,8 @@ class Series(Data):
         if where(index == min(indices))[0][0] - before < 0:
             raise ValueError("Minimum requested index %g, with window %g, is less than 0"
                              % (min(indices), window))
-        masks = [arange(where(index == i)[0][0]-before, where(index == i)[0][0]+after, dtype='int') for i in indices]
+        masks = [arange(where(index == i)[0][0] - before, where(index == i)[0][0] + after, dtype='int') for i in
+                 indices]
         return masks
 
     def mean_by_window(self, indices, window):
@@ -890,21 +891,22 @@ class Series(Data):
         freq : int
             Digital frequency at which to compute coherence and phase
         """
+
         def get(y, freq):
             y = y - mean(y)
             nframes = len(y)
             ft = fft.fft(y)
-            ft = ft[0:int(fix(nframes/2))]
-            ampFt = 2*abs(ft)/nframes
+            ft = ft[0:int(fix(nframes / 2))]
+            ampFt = 2 * abs(ft) / nframes
             amp = ampFt[freq]
-            ampSum = sqrt(sum(ampFt**2))
+            ampSum = sqrt(sum(ampFt ** 2))
             co = amp / ampSum
-            ph = -(pi/2) - angle(ft[freq])
+            ph = -(pi / 2) - angle(ft[freq])
             if ph < 0:
                 ph += pi * 2
             return array([co, ph])
 
-        if freq >= int(fix(size(self.index)/2)):
+        if freq >= int(fix(size(self.index) / 2)):
             raise Exception('Requested frequency, %g, is too high, '
                             'must be less than half the series duration' % freq)
 
@@ -937,7 +939,7 @@ class Series(Data):
         elif mode == 'valid':
             newmax = max(m, n) - min(m, n) + 1
         else:
-            newmax = n+m-1
+            newmax = n + m - 1
         newindex = arange(0, newmax)
 
         return self.map(lambda x: convolve(x, signal, mode), index=newindex)
@@ -966,14 +968,14 @@ class Series(Data):
 
         # created a matrix with lagged signals
         if lag is not 0:
-            shifts = range(-lag, lag+1)
+            shifts = range(-lag, lag + 1)
             d = len(s)
             m = len(shifts)
             sshifted = zeros((m, d))
             for i in range(0, len(shifts)):
                 tmp = roll(s, shifts[i])
                 if shifts[i] < 0:
-                    tmp[(d+shifts[i]):] = 0
+                    tmp[(d + shifts[i]):] = 0
                 if shifts[i] > 0:
                     tmp[:shifts[i]] = 0
                 sshifted[i, :] = tmp
@@ -1066,12 +1068,12 @@ class Series(Data):
 
         if method == 'window-exact':
             if window & 0x1:
-                left, right = (ceil(window/2), ceil(window/2) + 1)
+                left, right = (ceil(window / 2), ceil(window / 2) + 1)
             else:
-                left, right = (window/2, window/2)
+                left, right = (window / 2, window / 2)
 
             n = len(self.index)
-            baseFunc = lambda x: asarray([percentile(x[max(ix-left, 0):min(ix+right+1, n)], perc)
+            baseFunc = lambda x: asarray([percentile(x[max(ix - left, 0):min(ix + right + 1, n)], perc)
                                           for ix in arange(0, n)])
 
         def get(y):
@@ -1097,7 +1099,7 @@ class Series(Data):
         from thunder.images.images import Images
 
         if chunk_size is 'auto':
-            chunk_size = str(max([int(1e5/prod(self.baseshape)), 1]))
+            chunk_size = str(max([int(1e5 / prod(self.baseshape)), 1]))
 
         n = len(self.shape) - 1
 

@@ -1,18 +1,22 @@
+import json
 import logging
 import os
 from glob import glob
-import json
-import numpy as np
 from tempfile import NamedTemporaryFile
+
+import numpy as np
+
 try:
     from typing import Tuple, List, Optional, Union, Dict, Any
 except ImportError:
     print("List from typing is missing but not really needed")
 
+
     # junk variables
     # noinspection PyPep8Naming
     def List():
         raise RuntimeError("This should not be used for anything")
+
 
     Tuple = List
     Optional = List
@@ -20,7 +24,11 @@ except ImportError:
     Union = List
     Dict = List
 
-
+try:
+    from tqdm import tqdm as fancy_progress_bar
+except ImportError:
+    # tqdm not installed
+    fancy_progress_bar = lambda x: x
 
 
 def get_temp_filename(suffix):
@@ -32,6 +40,7 @@ class TypeTool(object):
     """
     For printing type outputs with a nice format
     """
+
     @staticmethod
     def info(obj):
         """
@@ -40,18 +49,22 @@ class TypeTool(object):
         :return: str for type
         """
         if type(obj) is tuple:
-            return '({})'.format(', '.join(map(TypeTool.info,obj)))
+            return '({})'.format(', '.join(map(TypeTool.info, obj)))
         elif type(obj) is list:
             return 'List[{}]'.format(TypeTool.info(obj[0]))
         else:
             ctype_name = type(obj).__name__
-            if ctype_name == 'ndarray': return '{}[{}]{}'.format(ctype_name,obj.dtype, obj.shape)
-            elif ctype_name == 'str': return 'string'
-            elif ctype_name == 'bytes': return 'List[byte]'
-            else: return ctype_name
+            if ctype_name == 'ndarray':
+                return '{}[{}]{}'.format(ctype_name, obj.dtype, obj.shape)
+            elif ctype_name == 'str':
+                return 'string'
+            elif ctype_name == 'bytes':
+                return 'List[byte]'
+            else:
+                return ctype_name
 
 
-def local_read_depth(in_folder, depth, ext = '.dcm', inc_parent = False):
+def local_read_depth(in_folder, depth, ext='.dcm', inc_parent=False):
     """
     Read recursively from a list of directories
     :param in_folder: the base path to start from
@@ -62,12 +75,13 @@ def local_read_depth(in_folder, depth, ext = '.dcm', inc_parent = False):
     """
     c_path = [in_folder]
     out_files = []
-    for i in range(depth+1):
-        c_wc_path = os.path.join(*(c_path + ['*']*i + ['*'+ext]))
-        out_files += [] if (not inc_parent) and (i<depth) else glob(c_wc_path)
+    for i in range(depth + 1):
+        c_wc_path = os.path.join(*(c_path + ['*'] * i + ['*' + ext]))
+        out_files += [] if (not inc_parent) and (i < depth) else glob(c_wc_path)
     return out_files
 
-def _fix_col_names(t_prev_df, rep_char = ""):
+
+def _fix_col_names(t_prev_df, rep_char=""):
     """
     Fix the column names to remove invalid characters
     :param t_prev_df: the old table
@@ -208,22 +222,31 @@ def threaded_flatmapvalues(in_rdd, in_operation, threads_per_worker=None):
 
     return in_rdd.mapPartitions(_part_flatmapvalues)
 
+
 class NumpyAwareJSONEncoder(json.JSONEncoder):
     """
     A JSON plugin that allows numpy data to be serialized 
     correctly (if inefficiently)
     """
+
     def default(self, obj):
-        if isinstance(obj, np.ndarray): # and obj.ndim == 1:
+        if isinstance(obj, np.ndarray):  # and obj.ndim == 1:
             return obj.tolist()
         if isinstance(obj, np.number):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
 
+# dictionary tools
+filter_dict = lambda fcn, old_dict: dict(filter(fcn, old_dict.items()))
+dict_append = lambda idct, new_kvs: dict(list(idct.items()) + new_kvs)
+dict_kwappend = lambda idct, **new_kvs: dict(list(idct.items()) + list(new_kvs.items()))
+
+
 def notsupported(mode):
     logging.getLogger('pyqae').warn("Operation not supported in '%s' mode" % mode)
     pass
+
 
 def check_spark():
     SparkContext = False
@@ -232,9 +255,11 @@ def check_spark():
     finally:
         return SparkContext
 
+
 def check_options(option, valid):
     if option not in valid:
         raise ValueError("Option must be one of %s, got '%s'" % (str(valid)[1:-1], option))
+
 
 def check_path(path, credentials=None):
     """
@@ -250,6 +275,7 @@ def check_path(path, credentials=None):
     if existing:
         raise ValueError('Path %s appears to already exist. Specify a new directory, '
                          'or call with overwrite=True to overwrite.' % path)
+
 
 def connection_with_anon(credentials, anon=True):
     """
@@ -277,6 +303,7 @@ def connection_with_anon(credentials, anon=True):
             return conn
         else:
             raise
+
 
 def connection_with_gs(name):
     """

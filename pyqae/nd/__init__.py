@@ -1,17 +1,20 @@
 # Tools for ND data processing 
 from bolt.spark.array import BoltArraySpark as raw_array
 from bolt.spark.construct import ConstructSpark as cs
+
 from pyqae.backend import Row, RDD
+
 sp_array = cs.array
 import numpy as np
 from numpy import ndarray
 from numpy import stack
 import os
 from skimage.io import imsave
-from pyqae.utils import Optional, List
+from pyqae.utils import Optional, List, Tuple
+
 
 def meshgridnd_like(in_img,
-                    rng_func = range):
+                    rng_func=range):
     """
     Makes a n-d meshgrid in the shape of the input image
     >>> import numpy as np
@@ -50,11 +53,11 @@ def meshgridnd_like(in_img,
     """
     new_shape = list(in_img.shape)
     all_range = [rng_func(i_len) for i_len in new_shape]
-    return tuple([x_arr.swapaxes(0,1) for x_arr in np.meshgrid(*all_range)])
+    return tuple([x_arr.swapaxes(0, 1) for x_arr in np.meshgrid(*all_range)])
 
 
-def filt_tensor(image_stack, # type: ndarray
-                filter_op, # type: (ndarray) -> ndarray
+def filt_tensor(image_stack,  # type: ndarray
+                filter_op,  # type: (ndarray) -> ndarray
                 tile_size=(128, 128),
                 padding=(0, 0),
                 *filter_args,
@@ -88,10 +91,10 @@ def filt_tensor(image_stack, # type: ndarray
     return filt_img.unchunk()
 
 
-def tensor_from_rdd(in_rdd, # type: RDD
-                    extract_array = lambda x: x[1], # type: (Any) -> ndarray
-                    sort_func = None, # type: Optional[(Any) -> int]
-                    make_idx = None # type: Optional[(Any) -> int]
+def tensor_from_rdd(in_rdd,  # type: RDD
+                    extract_array=lambda x: x[1],  # type: (Any) -> ndarray
+                    sort_func=None,  # type: Optional[(Any) -> int]
+                    make_idx=None  # type: Optional[(Any) -> int]
                     ):
     """
     Create a tensor object from an RDD of images
@@ -103,19 +106,20 @@ def tensor_from_rdd(in_rdd, # type: RDD
     :return: a distributed ND array containing the full tensor
     """
     in_rdd = in_rdd if sort_func is None else in_rdd.sortBy(sort_func)
-    zip_rdd = in_rdd.zipWithIndex().map(lambda x: (x[1], extract_array(x[0]))) if make_idx is None else in_rdd.map(lambda x: (make_idx(x), extract_array(x)))
+    zip_rdd = in_rdd.zipWithIndex().map(lambda x: (x[1], extract_array(x[0]))) if make_idx is None else in_rdd.map(
+        lambda x: (make_idx(x), extract_array(x)))
     key, val = zip_rdd.first()
-    if len(val.shape)==2:
-        add_channels = lambda x: np.expand_dims(x,2)
-        zip_rdd = zip_rdd.mapValues(add_channels) # add channel
+    if len(val.shape) == 2:
+        add_channels = lambda x: np.expand_dims(x, 2)
+        zip_rdd = zip_rdd.mapValues(add_channels)  # add channel
         val = add_channels(val)
-    return fromrdd(zip_rdd, dims = val.shape, dtype = val.dtype)
+    return fromrdd(zip_rdd, dims=val.shape, dtype=val.dtype)
 
 
 def fromrdd(rdd,
-            dims=None, # type: (int, int, int)
-            nrecords=None, # type: Optional[int]
-            dtype=None, # type: Optional[np.dtype]
+            dims=None,  # type: (int, int, int)
+            nrecords=None,  # type: Optional[int]
+            dtype=None,  # type: Optional[np.dtype]
             ordered=False
             ):
     """
@@ -155,8 +159,7 @@ def fromrdd(rdd,
     return raw_array(rdd.map(process_keys), shape=(nrecords,) + tuple(dims), dtype=dtype, split=1, ordered=ordered)
 
 
-
-def save_tensor_local(in_bolt_array, base_path, allow_overwrite = False, file_ext = 'tif'):
+def save_tensor_local(in_bolt_array, base_path, allow_overwrite=False, file_ext='tif'):
     """
     Save a bolt_array on local (shared directory) paths
     :param in_bolt_array: the bolt array object
@@ -168,11 +171,14 @@ def save_tensor_local(in_bolt_array, base_path, allow_overwrite = False, file_ex
         os.mkdir(base_path)
     except:
         print('{} already exists'.format(base_path))
-        if not allow_overwrite: raise RuntimeError("Overwriting has not been enabled! Please remove directory {}".format(base_path))
+        if not allow_overwrite: raise RuntimeError(
+            "Overwriting has not been enabled! Please remove directory {}".format(base_path))
     key_fix = lambda in_keys: "_".join(map(lambda k: "%05d" % (k), in_keys))
 
-    in_bolt_array.tordd().map(lambda x: imsave(os.path.join(base_path, "{}.{}".format(key_fix(x[0]), file_ext)), x[1])).collect()
+    in_bolt_array.tordd().map(
+        lambda x: imsave(os.path.join(base_path, "{}.{}".format(key_fix(x[0]), file_ext)), x[1])).collect()
     return base_path
+
 
 def tensor_to_dataframe(in_bolt_array):
     """
@@ -180,13 +186,15 @@ def tensor_to_dataframe(in_bolt_array):
     :param in_bolt_array:  the input bolt array
     :return: a DataFrame with fields `position` and `array_data`
     """
-    return in_bolt_array.tordd().map(lambda x: Row(position = x[0], array_data = x[1].tolist())).toDF()
+    return in_bolt_array.tordd().map(lambda x: Row(position=x[0], array_data=x[1].tolist())).toDF()
+
 
 def save_tensor_parquet(in_bolt_array, out_path):
     return tensor_to_dataframe(in_bolt_array).write.parquet(out_path)
 
-def _dsum(carr, # type: np.ndarray
-          cax # type: int
+
+def _dsum(carr,  # type: np.ndarray
+          cax  # type: int
           ):
     # type: (np.ndarray, int) -> np.ndarray
     """
@@ -206,13 +214,13 @@ def _dsum(carr, # type: np.ndarray
     """
     return np.sum(carr, tuple(n for n in range(carr.ndim) if n is not cax))
 
+
 def get_bbox(in_vol,
-             min_val = 0):
-    # type: (np.ndarray, float) -> np.ndarray
+             min_val=0):
+    # type: (np.ndarray, float) -> List[Tuple[int,int]]
     """
     Calculate a bounding box around an image in every direction
     :param in_vol: the array to look at
-    :param ndim: the number of dimensions the array has
     :param min_val: the value it must be greater than to add (not equal)
     :return: a list of min,max pairs for each dimension
 
@@ -232,14 +240,16 @@ def get_bbox(in_vol,
         else:
             ax_slice += [(c_sl[0], c_sl[-1] + 1)]
     return ax_slice
-def apply_bbox(in_vol, # type: np.ndarray
-               bbox_list # type: List[(int,int)]
+
+
+def apply_bbox(in_vol,  # type: np.ndarray
+               bbox_list  # type: List[(int,int)]
                ):
-    return in_vol.__getitem__([slice(a,b,1) for (a,b) in bbox_list])
+    return in_vol.__getitem__([slice(a, b, 1) for (a, b) in bbox_list])
 
 
-def autocrop(in_vol, # type: np.ndarray
-             min_val # type: double
+def autocrop(in_vol,  # type: np.ndarray
+             min_val  # type: double
              ):
     # type (...) -> np.ndarray
     """
@@ -265,8 +275,9 @@ def autocrop(in_vol, # type: np.ndarray
            [0, 1, 0],
            [0, 0, 1]], dtype=int8)
     """
-    return apply_bbox(in_vol,get_bbox(in_vol,
-                                      min_val = min_val))
+    return apply_bbox(in_vol, get_bbox(in_vol,
+                                       min_val=min_val))
+
 
 from scipy.ndimage import zoom
 
@@ -284,13 +295,12 @@ def iso_image_rescaler(t_array,  # type: np.ndarray
     return zoom(t_array, scale_f, order=order, **kwargs), [new_v_size] * 3
 
 
-
 def change_resolution_array(in_data,  # type: np.ndarray
-                         old_vox_size, # type: List[float]
-                             new_vox_size, # type: Union[float, np.ndarray]
-                      order=0,
-                      verbose=False,
-                      **kwargs):
+                            old_vox_size,  # type: List[float]
+                            new_vox_size,  # type: Union[float, np.ndarray]
+                            order=0,
+                            verbose=False,
+                            **kwargs):
     # type: (...) -> Tuple[np.array, List[float]]
     """
     A tool for changing the resolution of an array
@@ -315,9 +325,43 @@ def change_resolution_array(in_data,  # type: np.ndarray
     """
     if isinstance(new_vox_size, list):
         new_vox_size = np.array(new_vox_size)
-    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size]*len(old_vox_size))
-    assert len(new_v_size)==len(old_vox_size), "Voxel size and old spacing "+ \
-                                               "must have the same size {}, {}".format(new_v_size, old_vox_size)
+    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size] * len(old_vox_size))
+    assert len(new_v_size) == len(old_vox_size), "Voxel size and old spacing " + \
+                                                 "must have the same size {}, {}".format(new_v_size, old_vox_size)
     scale_f = np.array(old_vox_size) / new_v_size
     if verbose: print(old_vox_size, '->', new_v_size, ':', scale_f)
     return zoom(in_data, scale_f, order=order, **kwargs), list(new_v_size.tolist())
+
+
+def uniform_nd_bias_sampler(x_arr, count=1, base_p=0.5, axis=0, cut_off_val=None, ignore_zeros=False):
+    """
+    A tool for intelligently sampling from biased distributions
+    :param x_arr:
+    :param count:
+    :param base_p: the occurence rate of values which do not meet the cut_off_val
+    :param axis:
+    :param cut_off_val: should the sum be interpreted directly or as
+    :param ignore_zeros: should empty images be ignored (no in-class values)
+    :return:
+    >>> import numpy as np
+    >>> np.random.seed(1234)
+    >>> uniform_nd_bias_sampler(np.arange(6),base_p = 0, cut_off_val = 4)
+    array([5])
+    >>> uniform_nd_bias_sampler(np.arange(6).reshape((3,2,1,1)),base_p = 0, cut_off_val = 7)
+    array([2])
+    >>> np.random.seed(1234)
+    >>> sorted(uniform_nd_bias_sampler(np.arange(10),count = 10, base_p = 0.5, cut_off_val = 8))
+    [5, 7, 7, 9, 9, 9, 9, 9, 9, 9]
+    >>> np.sum(uniform_nd_bias_sampler(np.arange(10),count = 10000, base_p = 0.5, cut_off_val = 8)==9)
+    6673
+    """
+    c_mat = _dsum(x_arr, axis).astype(np.float32)
+    if cut_off_val is not None:
+        c_mat = (c_mat > cut_off_val).astype(np.float32)
+    if not ignore_zeros:
+        assert c_mat.sum() > 0, "Input array is has no values above cutoff {}".format(cut_off_val)
+    new_p = base_p * np.sum(c_mat) / np.sum(c_mat == 0)
+    d_mat = c_mat
+    d_mat[c_mat == 0] = new_p
+    d_mat /= d_mat.sum()
+    return np.random.choice(np.arange(x_arr.shape[axis]), size=count, replace=True, p=d_mat)

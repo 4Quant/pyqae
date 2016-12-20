@@ -1,13 +1,14 @@
-from numpy import array, asarray, ndarray, prod, ufunc, add, subtract, \
-    multiply, divide, isscalar, newaxis, unravel_index, dtype
-from bolt.utils import inshape, tupleize, slicify
+from functools import reduce
+
 from bolt.base import BoltArray
 from bolt.spark.array import BoltArraySpark
 from bolt.spark.chunk import ChunkedArray
-from functools import reduce
-
+from bolt.utils import inshape, tupleize, slicify
+from numpy import array, asarray, ndarray, prod, ufunc, add, subtract, \
+    multiply, divide, isscalar, newaxis, unravel_index, dtype
 
 from .utils import notsupported
+
 
 class Base(object):
     """
@@ -179,6 +180,7 @@ class Base(object):
         else:
             notsupported(self.mode)
 
+
 class Data(Base):
     """
     Generic base class for primary data types in Thunder.
@@ -209,13 +211,13 @@ class Data(Base):
             if isinstance(item, int):
                 label_item = ([item],)
             elif isinstance(item, (list, ndarray, slice)):
-                label_item = (item, )
+                label_item = (item,)
             elif isinstance(item, tuple):
                 label_item = item[:len(self.baseaxes)]
             newlabels = self.labels
             for (i, s) in enumerate(label_item):
                 if isinstance(s, slice):
-                    newlabels = newlabels[[s if j==i else slice(None) for j in range(len(label_item))]]
+                    newlabels = newlabels[[s if j == i else slice(None) for j in range(len(label_item))]]
                 else:
                     newlabels = newlabels.take(tupleize(s), i)
             result.labels = newlabels
@@ -246,8 +248,8 @@ class Data(Base):
             except:
                 raise ValueError("Labels must be convertible to an ndarray")
             if value.shape != self.baseshape:
-                raise ValueError("Labels shape {} must be the same as the leading dimensions of the Series {}"\
-                                  .format(value.shape, self.baseshape))
+                raise ValueError("Labels shape {} must be the same as the leading dimensions of the Series {}" \
+                                 .format(value.shape, self.baseshape))
 
         self._labels = value
 
@@ -539,7 +541,6 @@ class Data(Base):
             return self._constructor(op(self.values, other.values)).__finalize__(self)
 
         if self.mode == 'spark' and isinstance(other, Data):
-
             def func(record):
                 (k1, x), (k2, y) = record
                 return k1, op(x, y)

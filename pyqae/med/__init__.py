@@ -1,19 +1,16 @@
 """
 Modules related to Medicine and DICOM Files
 """
-from .. import read_dicom_file as dicom_simple_read
+from collections import namedtuple
+from typing import Any
 
+import dicom
 import numpy as np
 import pandas as pd
-import dicom
-from collections import namedtuple
-from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
 
-from PIL import Image as PImage
-import base64
-from io import BytesIO
-from typing import Any
 from pyqae import viz
+from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
+from .. import read_dicom_file as dicom_simple_read
 
 type_info = namedtuple('type_info', ['inferrable', 'realtype', 'has_nulltype', 'length', 'is_complex'])
 
@@ -183,9 +180,4 @@ twod_arr_type = sq_types.ArrayType(sq_types.ArrayType(sq_types.IntegerType()))
 # numpy data is not directly supported and typed arrays must be used instead therefor we run the .tolist command
 read_dicom_slice_udf = F.udf(lambda x: dicom_simple_read(x).pixel_array.tolist(), returnType=twod_arr_type)
 
-
-
-image_to_uri_udf = F.udf(viz._np_to_uri, returnType = sq_types.StringType())
-
-
-
+image_to_uri_udf = F.udf(viz._np_to_uri, returnType=sq_types.StringType())

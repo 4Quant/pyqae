@@ -2,7 +2,6 @@ import subprocess
 import threading
 
 
-
 class RunCmd(threading.Thread):
     '''RunCmd Class
         This class allow for running a command line program using threads
@@ -25,8 +24,9 @@ class RunCmd(threading.Thread):
         self.join(self.timeout)
 
         if self.is_alive():
-            self.p.kill()      #use self.p.terminate() if process dont needs a kill -9
+            self.p.kill()  # use self.p.terminate() if process dont needs a kill -9
             self.join()
+
 
 class ImageJ(object):
     '''imagej Class
@@ -38,7 +38,7 @@ class ImageJ(object):
         assert imagej_exe != '', "[ERROR]: ImageJ path is empty"
         self._executable = imagej_exe
 
-    def runImageJMacro(self, macroPath, macroParams, timeout = 60, macroName = 'Macro'):
+    def runImageJMacro(self, macroPath, macroParams, timeout=60, macroName='Macro'):
         '''Run a ImageJ Macro using command line
 
         Keyword arguments:
@@ -51,7 +51,3 @@ class ImageJ(object):
         cmdline = self._executable + ' --no-splash -macro  \"' + macroPath + '\" \"' + macroParams + '\"'
 
         RunCmd(cmdline, timeout).Run()
-
-
-
-

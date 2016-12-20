@@ -1,7 +1,6 @@
 from numpy import prod, rollaxis
 
 from ..base import Base
-import logging
 
 
 class Blocks(Base):

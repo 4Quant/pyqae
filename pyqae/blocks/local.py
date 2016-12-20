@@ -1,9 +1,7 @@
-from numpy import arange, r_, empty, zeros, random, where, prod, array, asarray, floor
 from itertools import product
-from bolt.utils import allstack
 
-from ..base import Base
-import logging
+from bolt.utils import allstack
+from numpy import arange, r_, empty, zeros, random, where, prod, array, asarray, floor
 
 
 class LocalChunks:
@@ -42,7 +40,7 @@ class LocalChunks:
             self.dtype = self.first.dtype
 
         if self.padding is None:
-            self.padding = len(self.shape)*(0,)
+            self.padding = len(self.shape) * (0,)
 
     @property
     def first(self):
@@ -59,14 +57,14 @@ class LocalChunks:
         -------
         ndarray
         """
-        if self.padding != len(self.shape)*(0,):
+        if self.padding != len(self.shape) * (0,):
             shape = self.values.shape
             arr = empty(shape, dtype=object)
             for inds in product(*[arange(s) for s in shape]):
                 slices = []
                 for i, p, n in zip(inds, self.padding, shape):
                     start = None if (i == 0 or p == 0) else p
-                    stop = None if (i == n-1 or p == 0) else -p
+                    stop = None if (i == n - 1 or p == 0) else -p
                     slices.append(slice(start, stop, None))
                 arr[inds] = self.values[inds][tuple(slices)]
         else:
@@ -146,9 +144,9 @@ class LocalChunks:
         plan = r_[arr.shape[0], plan]
 
         if padding is None:
-            pad = arr.ndim*(0,)
+            pad = arr.ndim * (0,)
         elif isinstance(padding, int):
-            pad = (0,) + (arr.ndim-1)*(padding,)
+            pad = (0,) + (arr.ndim - 1) * (padding,)
         else:
             pad = (0,) + padding
 
@@ -163,17 +161,17 @@ class LocalChunks:
                              % (tuple(pad), tuple(plan)))
 
         def rectify(x):
-            x[x<0] = 0
+            x[x < 0] = 0
             return x
 
         breaks = [r_[arange(0, n, s), n] for n, s in zip(shape, plan)]
-        limits = [zip(rectify(b[:-1]-p), b[1:]+p) for b, p in zip(breaks, pad)]
+        limits = [zip(rectify(b[:-1] - p), b[1:] + p) for b, p in zip(breaks, pad)]
         slices = product(*[[slice(x[0], x[1]) for x in l] for l in limits])
         vals = [arr[s] for s in slices]
         newarr = empty(len(vals), dtype=object)
         for i in range(len(vals)):
             newarr[i] = vals[i]
-        newsize = [b.shape[0]-1 for b in breaks]
+        newsize = [b.shape[0] - 1 for b in breaks]
         newarr = newarr.reshape(*newsize)
         return LocalChunks(newarr, shape, plan, dtype=arr.dtype, padding=pad)
 
@@ -217,7 +215,7 @@ class LocalChunks:
             axes = asarray(axes, 'int')
 
         # set padding
-        pad = array(len(shape)*[0, ])
+        pad = array(len(shape) * [0, ])
         if padding is not None:
             pad[axes] = padding
 
@@ -241,14 +239,14 @@ class LocalChunks:
                 remsize = 1.0 * nelements * elsize
                 s = []
                 for (i, d) in enumerate(dims):
-                    minsize = remsize/d
+                    minsize = remsize / d
                     if minsize >= size:
                         s.append(1)
                         remsize = minsize
                         continue
                     else:
-                        s.append(min(d, floor(size/minsize)))
-                        s[i+1:] = plan[i+1:]
+                        s.append(min(d, floor(size / minsize)))
+                        s[i + 1:] = plan[i + 1:]
                         break
 
             plan[axes] = s

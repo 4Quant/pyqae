@@ -1,5 +1,6 @@
 import os
 from warnings import warn
+
 warn("ChestNet has been replaced with PETNET and will not be developed in the future", DeprecationWarning)
 try:
     assert os.environ['KERAS_BACKEND'] == 'theano', "Theano backend is expected!"
@@ -8,27 +9,16 @@ except KeyError:
     os.environ['KERAS_BACKEND'] = 'theano'
 
 from keras import backend as K
+
 K.set_image_dim_ordering('th')
 
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Activation, Flatten
-from keras.layers import Convolution2D, MaxPooling2D, UpSampling2D, Cropping2D
-from keras.layers import merge, Input
-from keras.regularizers import l2
-from keras.optimizers import SGD, Adam
-from keras.utils import np_utils
+from keras.layers import Cropping2D
 
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Activation, Flatten, BatchNormalization
+from keras.models import Model
+from keras.layers import Dropout, BatchNormalization
 from keras.layers import Convolution2D, MaxPooling2D, UpSampling2D
-from keras.layers import merge, Input, Layer, Reshape
-from keras.regularizers import l2
-from keras.layers.core import ActivityRegularization
-from keras.optimizers import SGD, Adam
-from keras.utils import np_utils
-from collections import defaultdict
+from keras.layers import merge, Input
 import numpy as np
-from pyqae.utils import Tuple, List, Dict, Any
 from pyqae.dnn import fix_name_tf
 
 
@@ -40,7 +30,7 @@ def build_nd_umodel(in_shape, layers, depth,
                     dropout_rate=0.0,
                     last_layer_depth=4,
                     crop_mode=True,
-                    use_b_conv = False,
+                    use_b_conv=False,
                     use_bn=True):
     border_mode = 'valid' if crop_mode else 'same'
 
@@ -225,5 +215,7 @@ def build_2d_umodel(in_img, layers,
 
 if __name__ == "__main__":
     import doctest
+    # noinspection PyUnresolvedReferences
     from pyqae.dnn import chestnet
-    doctest.testmod(chestnet, verbose = True, report = True)
+
+    doctest.testmod(chestnet, verbose=True, report=True)

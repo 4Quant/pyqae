@@ -51,17 +51,19 @@ Example:
 """
 
 from __future__ import print_function, division
+
 import sys
 
 import mayavi  # pylint: disable=import-error,unused-import
 from mayavi import mlab  # pylint: disable=import-error
 from traits.trait_errors import TraitError
 
-__author__      = "Kristofor Maynard"
-__copyright__   = "Copyright 2015"
-__license__     = "MIT License"
+__author__ = "Kristofor Maynard"
+__copyright__ = "Copyright 2015"
+__license__ = "MIT License"
 
 _prev_offscreen_state = None
+
 
 def _resize_window(size, fig=None):
     if fig is None:
@@ -92,6 +94,7 @@ def _resize_window(size, fig=None):
     except Exception as e:
         print("Resize didn't work:: {0}".format(repr(e)), file=sys.stderr)
 
+
 def imayavi_show_window(fig, debug=False):
     """Try to show the window; only does something on Qt backend"""
     try:
@@ -101,6 +104,7 @@ def imayavi_show_window(fig, debug=False):
         if debug:
             print("Window show didn't work::", repr(e))
 
+
 def imayavi_hide_window(fig, debug=False):
     """Try to hide the window; only does something on Qt backend"""
     try:
@@ -109,6 +113,7 @@ def imayavi_hide_window(fig, debug=False):
     except Exception as e:  # pylint: disable=broad-except,unused-variable
         if debug:
             print("Window hide didn't work::", repr(e))
+
 
 def imayavi_show_inline(fig=None, size=None, antialiased=True, hide=True,
                         **kwargs):
@@ -150,6 +155,7 @@ def imayavi_show_inline(fig=None, size=None, antialiased=True, hide=True,
     ax.axis('off')
     plt.show()
 
+
 def imayavi_show(fig=None, size=None, stop=True):
     """shortcut for `mayavi.mlab.show(stop=True)`"""
 
@@ -166,6 +172,7 @@ def imayavi_show(fig=None, size=None, stop=True):
     if size is not None:
         _resize_window(size, fig=fig)
     mlab.show(stop=stop)
+
 
 def imayavi_remove_source(src):
     """Safely remove a specific vtk source
@@ -190,6 +197,7 @@ def imayavi_remove_source(src):
     src.start()
     src.stop()
     src.remove()
+
 
 def imayavi_clear_data(scenes=None):
     """Workaround for Mayavi / VTK memory leak
@@ -230,6 +238,7 @@ def imayavi_clear_data(scenes=None):
         s.start()
     return
 
+
 def load_ipython_extension(ipython):
     ipython.enable_matplotlib(gui="inline")
 
@@ -247,6 +256,7 @@ def load_ipython_extension(ipython):
     ipython.push("imayavi_clear_data", interactive=True)
     ipython.push("imayavi_show_window", interactive=True)
     ipython.push("imayavi_hide_window", interactive=True)
+
 
 def unload_ipython_extension(ipython):
     if sys.platform != "darwin":

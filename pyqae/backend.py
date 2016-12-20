@@ -2,6 +2,7 @@
 The code managing the backend (simplespark or pyspark) and making them as interchangable as possible
 """
 import warnings
+
 try:
     # These are only available inside of the pyspark application (using py4j)
     from pyspark.sql import Row
@@ -20,7 +21,6 @@ except ImportError:
     from pyqae.simplespark import LocalSparkContext as SparkContext
     from pyqae.simplespark import LocalSQLContext as SQLContext
     from pyqae.simplespark import _infer_type, _has_nulltype, sq_types, F
-
 
 StructType = sq_types.StructType
 MapType = sq_types.MapType

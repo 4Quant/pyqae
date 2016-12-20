@@ -2,11 +2,12 @@
 Tools for using SITK inside of PySpark
 """
 import os
+import warnings
+from pyqae.utils import Dict, Any, List, Tuple, Union
+
 import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import numpy as np
-import warnings
-from typing import Dict, Any
 
 try:
     from pyspark.sql import Row
@@ -16,19 +17,21 @@ except ImportError:
     from pyqae.simplespark import Row
     from pyqae.simplespark import LocalRDD as RDD
 
-_tag_lookup_dict = {} # type: Dict[str, int]
+_tag_lookup_dict = {}  # type: Dict[str, int]
 
 try:
     from dicom._dicom_dict import DicomDictionary as __tag_dict
+
     _tag_lookup_dict = __tag_dict
 except ImportError:
     warnings.warn("Pydicom library is not available header conversion is will not be available", ImportWarning)
-    __tag_dict = {} # just to make pycharm happy
+    __tag_dict = {}  # just to make pycharm happy
+
 
 def _try_to_hex(ckey):
     # type: (str) -> int
     try:
-        return int('0x{}{}'.format(*ckey.split('|')),0)
+        return int('0x{}{}'.format(*ckey.split('|')), 0)
     except:
         return -1
 
@@ -41,19 +44,19 @@ def tag_lookup(ckey):
     >>> assert tag_lookup('0008|0005') == 'SpecificCharacterSet', "Cant find simple code"
     >>> assert tag_lookup('bob') == 'bob', "Bob is simply bob"
     """
-    return _tag_lookup_dict.get(_try_to_hex(ckey), [0,0,0,0,ckey])[4]
-
+    return _tag_lookup_dict.get(_try_to_hex(ckey), [0, 0, 0, 0, ckey])[4]
 
 
 class ITKImage(object):
     """
     A nicer, pythonic wrapper for the ITK data which can be serialized by spark and used for DataFrames easily
     """
+
     def __init__(self,
-                 metadata, # type: Dict[str, str]
-                 itkdata, # type: Dict[str, Any]
-                 array, # type: np.ndarray
-                 verbose = False # type: bool
+                 metadata,  # type: Dict[str, str]
+                 itkdata,  # type: Dict[str, Any]
+                 array,  # type: np.ndarray
+                 verbose=False  # type: bool
                  ):
         """
         Create an ITK image from meta and array information
@@ -113,7 +116,7 @@ class ITKImage(object):
     def show(self):
         show_itk_image(self.create_image())
 
-    def save(self, path, useCompression = False):
+    def save(self, path, useCompression=False):
         """
         Save the image to an output path
         :param path: str the path to save to
@@ -123,8 +126,8 @@ class ITKImage(object):
         return sitk.WriteImage(self.create_image(), path, useCompression)
 
     def __repr__(self):
-        return "<{cname} Size:{itk_Size} Type:{itk_PixelIDTypeAsString}>".format(cname = self.__class__.__name__, **self.itkdata)
-
+        return "<{cname} Size:{itk_Size} Type:{itk_PixelIDTypeAsString}>".format(cname=self.__class__.__name__,
+                                                                                 **self.itkdata)
 
     @staticmethod
     @property
@@ -155,7 +158,6 @@ class ITKImage(object):
                 metadata[k] = "{}".format(v)
         return ITKImage(metadata, itkdata, arr)
 
-
     @staticmethod
     def load_file(img_path):
         """
@@ -166,7 +168,6 @@ class ITKImage(object):
 
         itk_img = sitk.ReadImage(img_path)
         return ITKImage.convert(itk_img)
-
 
     @staticmethod
     def convert(itk_img):
@@ -186,6 +187,7 @@ class ITKImage(object):
         itkdata = dict([("itk_{}".format(key), getattr(itk_img, "Get{}".format(key))()) for key in itk_keys])
         return ITKImage(metadata, itkdata, sitk.GetArrayFromImage(itk_img))
 
+
 def apply_filter(in_df, filter_op):
     """
     Apply a SimpleITK filter to a given image
@@ -197,6 +199,7 @@ def apply_filter(in_df, filter_op):
     post_rdd = itk_rdd.map(lambda x: Row(**ITKImage.convert(filter_op(x.create_image()))._asdict()))
     return post_rdd.toDF()
 
+
 def show_first_image(in_df):
     """
     Show the first image in the result
@@ -204,6 +207,7 @@ def show_first_image(in_df):
     :return:
     """
     return in_df.rdd.map(lambda x: ITKImage._parse_dict(x.asDict())).first().show()
+
 
 def fix_df_col_names(t_prev_df):
     """
@@ -219,7 +223,8 @@ def fix_df_col_names(t_prev_df):
         new_df = new_df.withColumnRenamed(col, new_col)
     return new_df
 
-def save_itk_local(in_df, base_path, allow_overwrite = False, file_ext = 'tif', useCompression = False):
+
+def save_itk_local(in_df, base_path, allow_overwrite=False, file_ext='tif', useCompression=False):
     """
     Save an ITK dataframe on local (shared directory) paths
     :param in_df: DataFrame of the itk images
@@ -232,20 +237,24 @@ def save_itk_local(in_df, base_path, allow_overwrite = False, file_ext = 'tif', 
         os.mkdir(base_path)
     except:
         print('{} already exists'.format(base_path))
-        if not allow_overwrite: raise RuntimeError("Overwriting has not been enabled! Please remove directory {}".format(base_path))
+        if not allow_overwrite: raise RuntimeError(
+            "Overwriting has not been enabled! Please remove directory {}".format(base_path))
 
     def _write(x):
         o_row, uid = x
         new_path = os.path.join(base_path, "{}.{}".format(uid, file_ext))
-        ITKImage._parse_dict(o_row.asDict()).save(new_path, useCompression = useCompression)
+        ITKImage._parse_dict(o_row.asDict()).save(new_path, useCompression=useCompression)
         return new_path
+
     return base_path, in_df.rdd.zipWithUniqueId().map(_write).cache().collect()
+
 
 def itk_obj_to_pandas(obj_lst):
     import pandas as pd
     return pd.DataFrame([in_obj._asdict() for in_obj in obj_lst])
 
-def _read_to_rdd(paths, context = None, **kwargs):
+
+def _read_to_rdd(paths, context=None, **kwargs):
     """
     Read a list of paths, list of lists, or RDD of paths to a RDD of ITK dictionaries
     :param paths:
@@ -260,7 +269,8 @@ def _read_to_rdd(paths, context = None, **kwargs):
         path_rdd = paths
     return path_rdd.map(lambda cpath: (cpath, ITKImage.load_file(cpath)._asdict()))
 
-def read_to_dataframe(paths, context = None, **kwargs):
+
+def read_to_dataframe(paths, context=None, **kwargs):
     """
     Create a dataframe from a list of paths, list of lists, or RDD of paths
     :param paths: files to load to make the ITK DataFrame
@@ -268,10 +278,11 @@ def read_to_dataframe(paths, context = None, **kwargs):
     :param kwargs: additional arguments for creating the RDD with parallelize
     :return: DataFrame with all relevant fields see ITKImage
     """
-    cur_rdd = _read_to_rdd(paths, context = context, **kwargs)
-    return cur_rdd.map(lambda x: Row(filename = x[0], **x[1])).toDF()
+    cur_rdd = _read_to_rdd(paths, context=context, **kwargs)
+    return cur_rdd.map(lambda x: Row(filename=x[0], **x[1])).toDF()
 
-def show_itk_image(img, title=None, margin=0.05, dpi=80 ):
+
+def show_itk_image(img, title=None, margin=0.05, dpi=80):
     nda = sitk.GetArrayFromImage(img)
 
     spacing = img.GetSpacing()
@@ -282,13 +293,13 @@ def show_itk_image(img, title=None, margin=0.05, dpi=80 ):
         c = nda.shape[-1]
 
         # the the number of components is 3 or 4 consider it an RGB image
-        if not c in (3,4):
+        if not c in (3, 4):
             slicer = True
 
     elif nda.ndim == 4:
         c = nda.shape[-1]
 
-        if not c in (3,4):
+        if not c in (3, 4):
             raise RuntimeError("Unable to show 3D-vector Image")
 
         # take a z-slice
@@ -301,25 +312,25 @@ def show_itk_image(img, title=None, margin=0.05, dpi=80 ):
         ysize = nda.shape[0]
         xsize = nda.shape[1]
 
-
     # Make a figure big enough to accomodate an axis of xpixels by ypixels
     # as well as the ticklabels, etc...
     figsize = (1 + margin) * ysize / dpi, (1 + margin) * xsize / dpi
+
     def callback(z=None):
 
-        extent = (0, xsize*spacing[1], ysize*spacing[0], 0)
+        extent = (0, xsize * spacing[1], ysize * spacing[0], 0)
 
         fig = plt.figure(figsize=figsize, dpi=dpi)
 
         # Make the axis the right size...
-        ax = fig.add_axes([margin, margin, 1 - 2*margin, 1 - 2*margin])
+        ax = fig.add_axes([margin, margin, 1 - 2 * margin, 1 - 2 * margin])
 
         plt.set_cmap("gray")
 
         if z is None:
-            ax.imshow(nda,extent=extent,interpolation=None)
+            ax.imshow(nda, extent=extent, interpolation=None)
         else:
-            ax.imshow(nda[z,...],extent=extent,interpolation=None)
+            ax.imshow(nda[z, ...], extent=extent, interpolation=None)
 
         if title:
             plt.title(title)
@@ -335,47 +346,48 @@ def show_itk_image(img, title=None, margin=0.05, dpi=80 ):
         slicer = False
 
     if slicer:
-        interact(lambda z: callback(z), z=(0,nda.shape[0]-1))
+        interact(lambda z: callback(z), z=(0, nda.shape[0] - 1))
     else:
         return callback()
 
+
 def show_itk_image3d(img, xslices=[], yslices=[], zslices=[], title=None, margin=0.05, dpi=80):
     size = img.GetSize()
-    img_xslices = [img[s,:,:] for s in xslices]
-    img_yslices = [img[:,s,:] for s in yslices]
-    img_zslices = [img[:,:,s] for s in zslices]
+    img_xslices = [img[s, :, :] for s in xslices]
+    img_yslices = [img[:, s, :] for s in yslices]
+    img_zslices = [img[:, :, s] for s in zslices]
 
     maxlen = max(len(img_xslices), len(img_yslices), len(img_zslices))
 
-
-    img_null = sitk.Image([0,0], img.GetPixelIDValue(), img.GetNumberOfComponentsPerPixel())
+    img_null = sitk.Image([0, 0], img.GetPixelIDValue(), img.GetNumberOfComponentsPerPixel())
 
     img_slices = []
     d = 0
 
     if len(img_xslices):
-        img_slices += img_xslices + [img_null]*(maxlen-len(img_xslices))
+        img_slices += img_xslices + [img_null] * (maxlen - len(img_xslices))
         d += 1
 
     if len(img_yslices):
-        img_slices += img_yslices + [img_null]*(maxlen-len(img_yslices))
+        img_slices += img_yslices + [img_null] * (maxlen - len(img_yslices))
         d += 1
 
     if len(img_zslices):
-        img_slices += img_zslices + [img_null]*(maxlen-len(img_zslices))
-        d +=1
+        img_slices += img_zslices + [img_null] * (maxlen - len(img_zslices))
+        d += 1
 
     if maxlen != 0:
         if img.GetNumberOfComponentsPerPixel() == 1:
-            img = sitk.Tile(img_slices, [maxlen,d])
-        #TODO check in code to get Tile Filter working with VectorImages
+            img = sitk.Tile(img_slices, [maxlen, d])
+        # TODO check in code to get Tile Filter working with VectorImages
         else:
             img_comps = []
-            for i in range(0,img.GetNumberOfComponentsPerPixel()):
+            for i in range(0, img.GetNumberOfComponentsPerPixel()):
                 img_slices_c = [sitk.VectorIndexSelectionCast(s, i) for s in img_slices]
-                img_comps.append(sitk.Tile(img_slices_c, [maxlen,d]))
+                img_comps.append(sitk.Tile(img_slices_c, [maxlen, d]))
             img = sitk.Compose(img_comps)
     return show_itk_image(img, title, margin, dpi)
+
 
 def _get_spacing_np(in_data):
     # type: (sitk.Image) -> np.ndarray
@@ -395,11 +407,12 @@ def _get_spacing_np(in_data):
 
 from scipy.ndimage import zoom
 
+
 def extract_custom_array(in_data,  # type: sitk.Image
-                             new_vox_size, # type: Union[float, np.ndarray]
-                      order=0,
-                      verbose=False,
-                      **kwargs):
+                         new_vox_size,  # type: Union[float, np.ndarray]
+                         order=0,
+                         verbose=False,
+                         **kwargs):
     # type: (...) -> Tuple[np.array, List[float]]
     """
     Forces the 3d array returned to be isotropic so the rendering looks correct
@@ -413,8 +426,9 @@ def extract_custom_array(in_data,  # type: sitk.Image
 
     gs_arr = _get_spacing_np(in_data).tolist()
     t_array = sitk.GetArrayFromImage(in_data)
-    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size]*len(gs_arr))
-    assert len(new_v_size)==len(gs_arr), "Voxel size and old spacing must have the same size {}, {}".format(new_v_size, gs_arr)
+    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size] * len(gs_arr))
+    assert len(new_v_size) == len(gs_arr), "Voxel size and old spacing must have the same size {}, {}".format(
+        new_v_size, gs_arr)
     scale_f = np.array(gs_arr) / new_v_size
     if verbose: print(gs_arr, '->', new_v_size, ':', scale_f)
     return zoom(t_array, scale_f, order=order, **kwargs), list(new_v_size.tolist())
@@ -422,4 +436,5 @@ def extract_custom_array(in_data,  # type: sitk.Image
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod(verbose=True)

@@ -1,5 +1,6 @@
 import os
 import shutil
+
 # standard library reorganization between Python 2 and 3
 try:
     from urllib.parse import urlparse
@@ -163,6 +164,7 @@ SCHEMAS_TO_FILEWRITERS = {
     'ftp': None
 }
 
+
 def get_parallel_writer(path):
     """
     Returns the class of a parallel file writer for the scheme in path.
@@ -172,6 +174,7 @@ def get_parallel_writer(path):
     Returns LocalFileReader if scheme is absent or not recognized.
     """
     return get_by_scheme(path, SCHEMAS_TO_PARALLELWRITERS, LocalParallelWriter)
+
 
 def get_file_writer(path):
     """

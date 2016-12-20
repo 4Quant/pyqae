@@ -1,7 +1,7 @@
 import logging
+
 from numpy import ndarray, arange, amax, amin, size, asarray, random, prod, \
     apply_along_axis
-from itertools import product
 
 from ..base import Data
 
@@ -78,7 +78,7 @@ class Images(Data):
 
         if self.mode == 'spark':
             if chunk_size is 'auto':
-                chunk_size = str(max([int(1e5/self.shape[0]), 1]))
+                chunk_size = str(max([int(1e5 / self.shape[0]), 1]))
             chunks = self.values.chunk(chunk_size, padding=padding).keys_to_values((0,))
 
         if self.mode == 'local':
@@ -105,7 +105,7 @@ class Images(Data):
         from thunder.series.series import Series
 
         if chunk_size is 'auto':
-            chunk_size = str(max([int(1e5/self.shape[0]), 1]))
+            chunk_size = str(max([int(1e5 / self.shape[0]), 1]))
 
         n = len(self.shape) - 1
         index = arange(self.shape[0])
@@ -114,7 +114,7 @@ class Images(Data):
             return Series(self.values.swap((0,), tuple(range(n)), size=chunk_size), index=index)
 
         if self.mode == 'local':
-            return Series(self.values.transpose(tuple(range(1, n+1)) + (0,)), index=index)
+            return Series(self.values.transpose(tuple(range(1, n + 1)) + (0,)), index=index)
 
     def tolocal(self):
         """
@@ -266,7 +266,7 @@ class Images(Data):
         """
         if axis >= size(self.value_shape):
             raise Exception('Axis for projection (%s) exceeds '
-                            'image dimensions (%s-%s)' % (axis, 0, size(self.value_shape)-1))
+                            'image dimensions (%s-%s)' % (axis, 0, size(self.value_shape) - 1))
 
         new_value_shape = list(self.value_shape)
         del new_value_shape[axis]
@@ -285,7 +285,7 @@ class Images(Data):
         """
         if axis >= size(self.value_shape):
             raise Exception('Axis for projection (%s) exceeds '
-                            'image dimensions (%s-%s)' % (axis, 0, size(self.value_shape)-1))
+                            'image dimensions (%s-%s)' % (axis, 0, size(self.value_shape) - 1))
 
         new_value_shape = list(self.value_shape)
         del new_value_shape[axis]

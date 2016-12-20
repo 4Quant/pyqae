@@ -1,16 +1,16 @@
-import pydot
 import time
-import numpy as np
-from ..utils import TypeTool
 from collections import namedtuple as _invisiblenamedtuple
+
+import numpy as np
+import pydot
+
+from ..utils import TypeTool
 
 rdd_node_colors = {'parallelize': 'turquoise', 'map': 'lightgreen', 'mapValues': 'lightgreen',
                    'flatMap': 'yellow', 'flatMapValues': 'yellow',
                    'groupBy': 'orange', 'reduceByKey': 'lightred'}
 
-
 from collections import OrderedDict
-
 
 
 def show_dag(cur_rdd, o_file, calc_size=0):

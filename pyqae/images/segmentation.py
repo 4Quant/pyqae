@@ -1,14 +1,16 @@
-from pyqae.nd import meshgridnd_like
 import numpy as np
+
+from pyqae.nd import meshgridnd_like
 
 """
 The segmentation tools which are commonly used for a large number of different applications and thus part of the core PYQAE framework
 
 """
 
+
 def remove_edges(in_img,
                  radius,
-                 sph_mode = True):
+                 sph_mode=True):
     # type: (np.ndarray, float, bool) -> np.ndarray
     """
     The function removes all values (with a simple mask) outside of the radius
@@ -56,13 +58,13 @@ def remove_edges(in_img,
             [0, 0, 0]]], dtype=int8)
 
     """
-    xx, yy, zz = meshgridnd_like(in_img, rng_func=lambda n: np.linspace(-1,1,num=n))
-    cdist = lambda x: np.power((x.astype(np.float32)-x.mean())/(x.max()-x.mean()),2)
-    cdist = lambda x: np.power(x,2)
-    dist_img = cdist(xx)+cdist(yy)
+    xx, yy, zz = meshgridnd_like(in_img, rng_func=lambda n: np.linspace(-1, 1, num=n))
+    cdist = lambda x: np.power((x.astype(np.float32) - x.mean()) / (x.max() - x.mean()), 2)
+    cdist = lambda x: np.power(x, 2)
+    dist_img = cdist(xx) + cdist(yy)
     if sph_mode:
         dist_img += cdist(zz)
-    return in_img*(np.sqrt(dist_img)<radius)
+    return in_img * (np.sqrt(dist_img) < radius)
 
 
 def remove_edge_objects(in_img):
@@ -74,7 +76,7 @@ def remove_edge_objects(in_img):
     size_sorted_labels = sorted(filter(lambda x: x not in edge_labels, all_labels),
                                 key=lambda grp_label: -1 * np.sum(in_img == grp_label))
     for new_label, old_label in enumerate(size_sorted_labels):
-        clean_lung_comp[in_img == old_label] = new_label+1
+        clean_lung_comp[in_img == old_label] = new_label + 1
     return clean_lung_comp
 
 
@@ -107,8 +109,9 @@ def remove_small_and_sort_labels(in_lab_img, min_label_count):
                                        np.unique(in_lab_img[in_lab_img > 0])),
                                 key=lambda grp_label: -1 * np.sum(in_lab_img == grp_label))
     for new_label, old_label in enumerate(size_sorted_labels):
-        clean_lab_img[in_lab_img == old_label] = new_label+1
+        clean_lab_img[in_lab_img == old_label] = new_label + 1
     return clean_lab_img
+
 
 from skimage.morphology import convex_hull as ch
 
@@ -127,4 +130,3 @@ def convex_hull_slice(in_img):
 def convex_hull_3d(in_img):
     # type: (np.ndarray) -> np.ndarray
     return np.stack([convex_hull_slice(c_slice > 0) for c_slice in in_img])
-

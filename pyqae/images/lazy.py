@@ -1,12 +1,12 @@
-from bolt.spark.chunk import ChunkedArray
-from bolt.utils import slicify
-from bolt import array as bt_array
-from PIL import Image as PImg
-import numpy as np
 import warnings
 from typing import List
 
-from pyqae.backend import Row, RDD
+import numpy as np
+from PIL import Image as PImg
+from bolt.spark.chunk import ChunkedArray
+from bolt.utils import slicify
+
+from pyqae.backend import RDD
 
 
 class LazyImageBackend(object):
@@ -67,7 +67,7 @@ class LazyImagePillowBackend(LazyImageBackend):
         return self.open_image().size
 
 
-backends = [LazyImagePillowBackend] # type: List[LazyImageBackend]
+backends = [LazyImagePillowBackend]  # type: List[LazyImageBackend]
 try:
     from osgeo import gdal
 
@@ -111,6 +111,7 @@ try:
 
     backends += [LazyImageGDALBackend]
 except ImportError:
+    gdal = None
     warnings.warn("The GDAL Lazy Image Backend requires that the GDAL package is installed", ImportWarning)
 
 

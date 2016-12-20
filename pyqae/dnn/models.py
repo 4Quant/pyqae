@@ -3,25 +3,27 @@ Existing models for Neural Networks
 """
 from __future__ import print_function
 
-import numpy as np
-from keras.models import Model
 import keras.models as models
-from keras.layers import Input, merge, Convolution2D, MaxPooling2D, UpSampling2D
-from keras.layers.core import Layer, Dense, Dropout, Activation, Flatten, Reshape, Merge, Permute
-from keras.layers.convolutional import Convolution2D, MaxPooling2D, UpSampling2D, ZeroPadding2D
-from keras.layers.normalization import BatchNormalization
 from keras import backend as K
+from keras.layers import Input, merge
+from keras.layers.convolutional import Convolution2D, MaxPooling2D, UpSampling2D, ZeroPadding2D
+from keras.layers.core import Layer, Activation, Reshape, Permute
+from keras.layers.normalization import BatchNormalization
+from keras.models import Model
 
-def dice_coef(y_true, y_pred, smooth = 1.):
+
+def dice_coef(y_true, y_pred, smooth=1.):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
     return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
 
+
 def dice_coef_loss(y_true, y_pred):
     return -dice_coef(y_true, y_pred)
 
-def create_unet(img_rows = 64, img_cols = 80, img_channels = 1):
+
+def create_unet(img_rows=64, img_cols=80, img_channels=1):
     """
     Create a network modeled after U-NET from Olaf Ronnenberger
     http://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/
@@ -30,7 +32,7 @@ def create_unet(img_rows = 64, img_cols = 80, img_channels = 1):
     
     Note: The crop and copy step is currently not implemented
     """
-    
+
     inputs = Input((img_channels, img_rows, img_cols))
     conv1 = Convolution2D(32, 3, 3, activation='relu', border_mode='same')(inputs)
     conv1 = Convolution2D(32, 3, 3, activation='relu', border_mode='same')(conv1)
@@ -72,8 +74,10 @@ def create_unet(img_rows = 64, img_cols = 80, img_channels = 1):
     model = Model(input=inputs, output=conv10)
     return model
 
+
 class UnPooling2D(Layer):
     """A 2D Repeat layer"""
+
     def __init__(self, poolsize=(2, 2)):
         super(UnPooling2D, self).__init__()
         self.poolsize = poolsize
@@ -93,40 +97,42 @@ class UnPooling2D(Layer):
         return output
 
     def get_config(self):
-        return {"name":self.__class__.__name__,
-            "poolsize":self.poolsize}
+        return {"name": self.__class__.__name__,
+                "poolsize": self.poolsize}
 
-def create_segnet(img_rows = 360, img_cols = 480, img_channels = 3 , kernel = 3, filter_size = 64, pad = 1, pool_size = 2):
+
+def create_segnet(img_rows=360, img_cols=480, img_channels=3, kernel=3, filter_size=64, pad=1, pool_size=2):
     """
     An implementation of Segnet (http://arxiv.org/pdf/1511.00561v2.pdf)
     By Vijay Badrinarayanan, Alex Kendall, Roberto Cipolla,
     The dimensions optimized to match the VGG networks well and are optimized for street scenes
     """
+
     def create_encoding_layers():
         return [
-            ZeroPadding2D(padding=(pad,pad)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(filter_size, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
             Activation('relu'),
             MaxPooling2D(pool_size=(pool_size, pool_size)),
 
-            ZeroPadding2D(padding=(pad,pad)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(128, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
             Activation('relu'),
             MaxPooling2D(pool_size=(pool_size, pool_size)),
 
-            ZeroPadding2D(padding=(pad,pad)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(256, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
             Activation('relu'),
             MaxPooling2D(pool_size=(pool_size, pool_size)),
 
-            ZeroPadding2D(padding=(pad,pad)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(512, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
             Activation('relu'),
-            #MaxPooling2D(pool_size=(pool_size, pool_size)),
+            # MaxPooling2D(pool_size=(pool_size, pool_size)),
         ]
 
     def create_decoding_layers():
@@ -134,24 +140,24 @@ def create_segnet(img_rows = 360, img_cols = 480, img_channels = 3 , kernel = 3,
         filter_size = 64
         pad = 1
         pool_size = 2
-        return[
-            #UpSampling2D(size=(pool_size,pool_size)),
-            ZeroPadding2D(padding=(pad,pad)),
+        return [
+            # UpSampling2D(size=(pool_size,pool_size)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(512, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
 
-            UpSampling2D(size=(pool_size,pool_size)),
-            ZeroPadding2D(padding=(pad,pad)),
+            UpSampling2D(size=(pool_size, pool_size)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(256, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
 
-            UpSampling2D(size=(pool_size,pool_size)),
-            ZeroPadding2D(padding=(pad,pad)),
+            UpSampling2D(size=(pool_size, pool_size)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(128, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
 
-            UpSampling2D(size=(pool_size,pool_size)),
-            ZeroPadding2D(padding=(pad,pad)),
+            UpSampling2D(size=(pool_size, pool_size)),
+            ZeroPadding2D(padding=(pad, pad)),
             Convolution2D(filter_size, kernel, kernel, border_mode='valid'),
             BatchNormalization(),
         ]
@@ -160,15 +166,15 @@ def create_segnet(img_rows = 360, img_cols = 480, img_channels = 3 , kernel = 3,
     # Add a noise layer to get a denoising autoencoder. This helps avoid overfitting
     autoencoder.add(Layer(input_shape=(img_channels, img_rows, img_cols)))
 
-    #autoencoder.add(GaussianNoise(sigma=0.3))
+    # autoencoder.add(GaussianNoise(sigma=0.3))
     autoencoder.encoding_layers = create_encoding_layers()
     autoencoder.decoding_layers = create_decoding_layers()
     for l in autoencoder.encoding_layers:
         autoencoder.add(l)
     for l in autoencoder.decoding_layers:
         autoencoder.add(l)
-    autoencoder.add(Convolution2D(12, 1, 1, border_mode='valid',))
-    autoencoder.add(Reshape((12,img_rows*img_cols), input_shape=(12,img_rows,img_cols)))
+    autoencoder.add(Convolution2D(12, 1, 1, border_mode='valid', ))
+    autoencoder.add(Reshape((12, img_rows * img_cols), input_shape=(12, img_rows, img_cols)))
     autoencoder.add(Permute((2, 1)))
     autoencoder.add(Activation('softmax'))
-    return autoencoder	
+    return autoencoder

@@ -1,4 +1,4 @@
-from numpy import array, arange, frombuffer, load, asarray, random, \
+from numpy import array, arange, frombuffer, asarray, random, \
     fromstring, expand_dims, unravel_index, prod
 
 try:
@@ -7,6 +7,7 @@ except NameError:
     buffer = memoryview
 
 from ..utils import check_spark, check_options
+
 spark = check_spark()
 
 
@@ -68,8 +69,9 @@ def fromrdd(rdd, nrecords=None, shape=None, index=None, labels=None, dtype=None,
             k = (k,)
         return k, v
 
-    values = BoltArraySpark(rdd.map(process_keys), shape=shape, dtype=dtype, split=len(shape)-1, ordered=ordered)
+    values = BoltArraySpark(rdd.map(process_keys), shape=shape, dtype=dtype, split=len(shape) - 1, ordered=ordered)
     return Series(values, index=index, labels=labels)
+
 
 def fromarray(values, index=None, labels=None, npartitions=None, engine=None):
     """
@@ -123,6 +125,7 @@ def fromarray(values, index=None, labels=None, npartitions=None, engine=None):
 
     return Series(values, index=index, labels=labels)
 
+
 def fromlist(items, accessor=None, index=None, labels=None, dtype=None, npartitions=None, engine=None):
     """
     Load series data from a list with an optional accessor function.
@@ -158,7 +161,7 @@ def fromlist(items, accessor=None, index=None, labels=None, dtype=None, npartiti
         if dtype is None:
             dtype = accessor(items[0]).dtype if accessor else items[0].dtype
         nrecords = len(items)
-        keys = map(lambda k: (k, ), range(len(items)))
+        keys = map(lambda k: (k,), range(len(items)))
         if not npartitions:
             npartitions = engine.defaultParallelism
         items = zip(keys, items)
@@ -172,7 +175,9 @@ def fromlist(items, accessor=None, index=None, labels=None, dtype=None, npartiti
             items = [accessor(i) for i in items]
         return fromarray(items, index=index, labels=labels)
 
-def fromtext(path, ext='txt', dtype='float64', skip=0, shape=None, index=None, labels=None, npartitions=None, engine=None, credentials=None):
+
+def fromtext(path, ext='txt', dtype='float64', skip=0, shape=None, index=None, labels=None, npartitions=None,
+             engine=None, credentials=None):
     """
     Loads series data from text files.
 
@@ -251,7 +256,9 @@ def fromtext(path, ext='txt', dtype='float64', skip=0, shape=None, index=None, l
 
         return fromarray(values, index=index, labels=labels)
 
-def frombinary(path, ext='bin', conf='conf.json', dtype=None, shape=None, skip=0, index=None, labels=None, engine=None, credentials=None):
+
+def frombinary(path, ext='bin', conf='conf.json', dtype=None, shape=None, skip=0, index=None, labels=None, engine=None,
+               credentials=None):
     """
     Load series data from flat binary files.
 
@@ -332,7 +339,7 @@ def frombinary(path, ext='bin', conf='conf.json', dtype=None, shape=None, skip=0
 
         if not len(values) == prod(shape[0:-1]):
             raise ValueError('Unexpected shape, got %g records but expected %g'
-                             % (len(values), prod(shape[0:-1])))
+                             % (len(values), int(prod(shape[0:-1]))))
 
         values = asarray(values, dtype=dtype)
 
@@ -340,6 +347,7 @@ def frombinary(path, ext='bin', conf='conf.json', dtype=None, shape=None, skip=0
             values = values.reshape(shape)
 
         return fromarray(values, index=index, labels=labels)
+
 
 def _binaryconfig(path, conf, dtype=None, shape=None, credentials=None):
     """
@@ -369,6 +377,7 @@ def _binaryconfig(path, conf, dtype=None, shape=None, credentials=None):
 
     return params['shape'], params['dtype']
 
+
 def fromrandom(shape=(100, 10), npartitions=1, seed=42, engine=None):
     """
     Generate random gaussian series data.
@@ -394,6 +403,7 @@ def fromrandom(shape=(100, 10), npartitions=1, seed=42, engine=None):
         return random.randn(shape[1])
 
     return fromlist(range(shape[0]), accessor=generate, npartitions=npartitions, engine=engine)
+
 
 def fromexample(name=None, engine=None):
     """

@@ -20,13 +20,14 @@ def topng(images, path, prefix="image", overwrite=False, credentials=None):
 
     def tobuffer(kv):
         key, img = kv
-        fname = prefix+"-"+"%05d.png" % int(key)
+        fname = prefix + "-" + "%05d.png" % int(key)
         bytebuf = BytesIO()
         imsave(bytebuf, img, format='PNG')
         return fname, bytebuf.getvalue()
 
     writer = get_parallel_writer(path)(path, overwrite=overwrite, credentials=credentials)
     images.foreach(lambda x: writer.write(tobuffer(x)))
+
 
 def totif(images, path, prefix="image", overwrite=False, credentials=None):
     """
@@ -47,13 +48,14 @@ def totif(images, path, prefix="image", overwrite=False, credentials=None):
 
     def tobuffer(kv):
         key, img = kv
-        fname = prefix+"-"+"%05d.tif" % int(key)
+        fname = prefix + "-" + "%05d.tif" % int(key)
         bytebuf = BytesIO()
         imsave(bytebuf, img)
         return fname, bytebuf.getvalue()
 
     writer = get_parallel_writer(path)(path, overwrite=overwrite, credentials=credentials)
     images.foreach(lambda x: writer.write(tobuffer(x)))
+
 
 def tobinary(images, path, prefix="image", overwrite=False, credentials=None):
     """
@@ -73,6 +75,7 @@ def tobinary(images, path, prefix="image", overwrite=False, credentials=None):
     writer = get_parallel_writer(path)(path, overwrite=overwrite, credentials=credentials)
     images.foreach(lambda x: writer.write(tobuffer(x)))
     config(path, list(images.value_shape), images.dtype, overwrite=overwrite)
+
 
 def config(path, shape, dtype, name="conf.json", overwrite=True, credentials=None):
     """

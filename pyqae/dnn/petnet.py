@@ -25,7 +25,7 @@ from keras.layers import Convolution2D, MaxPooling2D, UpSampling2D
 from keras.layers import merge, Input, Lambda
 from collections import defaultdict
 import numpy as np
-from pyqae.utils import Tuple, List, Dict, Any
+from pyqae.utils import Tuple, List, Dict, Any, Optional
 from pyqae.dnn import fix_name_tf
 
 
@@ -39,14 +39,14 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
                      last_layer_depth=4,
                      crop_mode=True,
                      use_b_conv=False,
-                     use_b_conv_out = False, # type: Optional[bool]
+                     use_b_conv_out=False,  # type: Optional[bool]
                      use_bn=True,
                      verbose=False,
                      single_input=False):
     border_mode = 'valid' if crop_mode else 'same'
     use_b_conv_out = use_b_conv_out if use_b_conv_out is not None else use_b_conv
     x_wid, y_wid = in_shape
-    branch_dict = defaultdict(lambda: dict())  # type: Dict[Dict[str, Any]]
+    branch_dict = defaultdict(dict)  # type: Dict[str, Dict[str, Any]]
 
     input_list = []
 
@@ -71,9 +71,18 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
 
     for (branch_name, branch_ch, branch_depth), input_im in zip(branches, in_branches):
         branch_id = fix_name_tf(branch_name)
-        fmap = conv_op(branch_depth, 3, name='A {} Prefiltering'.format(branch_id), border_mode=border_mode)(input_im)
-        first_layer = conv_op(branch_depth, 3, name='B {} Prefiltering'.format(branch_id), border_mode=border_mode)(
-            fmap)
+        if branch_depth > 0:
+            fmap = conv_op(branch_depth, 3, name='A {} Prefiltering'.format(branch_id), border_mode=border_mode)(
+                input_im)
+            first_layer = conv_op(branch_depth, 3, name='B {} Prefiltering'.format(branch_id), border_mode=border_mode)(
+                fmap)
+        else:
+            if crop_mode:
+                first_layer = crop_op(lay_kern_wid // 2, 'A {} PreSkip Cropping'.format(branch_id))(
+                    input_im)
+                first_layer = crop_op(lay_kern_wid // 2, 'B {} PreSkip Cropping'.format(branch_id))(first_layer)
+            else:
+                first_layer = input_im
 
         last_layer = first_layer
         conv_layers = []
@@ -105,12 +114,23 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
             else:
                 lay_kern_wid = layer_size_fcn(ilay)
 
-            post_conv_step = conv_op(lay_depth, lay_kern_wid,
-                                  border_mode=border_mode,
-                                  name='A {} Feature Maps [{}]'.format(branch_id, ilay, lay_depth))(last_layer)
+            if lay_depth > 0:
+                post_conv_step = conv_op(lay_depth, lay_kern_wid,
+                                         border_mode=border_mode,
+                                         name='A {} Feature Maps [{}]'.format(branch_id, ilay, lay_depth))(last_layer)
 
-            if use_b_conv: post_conv_step = conv_op(lay_depth, lay_kern_wid, border_mode=border_mode,
-                                     name='B {} Feature-Maps [{}]'.format(branch_id, ilay, lay_depth))(post_conv_step)
+                if use_b_conv: post_conv_step = conv_op(lay_depth, lay_kern_wid, border_mode=border_mode,
+                                                        name='B {} Feature-Maps [{}]'.format(branch_id, ilay,
+                                                                                             lay_depth))(post_conv_step)
+            else:
+                if crop_mode:
+                    post_conv_step = crop_op(lay_kern_wid // 2, 'A {} Skip Cropping [{}]'.format(branch_id, ilay))(
+                        last_layer)
+                    if use_b_conv:
+                        post_conv_step = crop_op(lay_kern_wid // 2, 'B {} Skip Cropping [{}]'.format(branch_id, ilay))(
+                            post_conv_step)
+                else:
+                    post_conv_step = last_layer
 
             last_layer = post_conv_step
 
@@ -162,7 +182,7 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
             last_layer = cur_up
 
             if dropout_rate > 0: last_layer = Dropout(dropout_rate,
-                                                     name=fix_name_tf('Random Removal [{}]'.format(ilay + 1)))(
+                                                      name=fix_name_tf('Random Removal [{}]'.format(ilay + 1)))(
                 last_layer)
             a_conv = conv_op(lay_depth, 3, name='A Deconvolution [{}]'.format(ilay + 1), border_mode=border_mode)(
                 last_layer)
@@ -191,7 +211,7 @@ def build_2d_umodel(in_img,
                     last_layer_depth=1,
                     use_bn=True,
                     crop_mode=True,
-                    use_b_conv = True,
+                    use_b_conv=True,
                     verbose=False,
                     single_input=False
                     ):
@@ -241,6 +261,18 @@ def build_2d_umodel(in_img,
     (3, 32, 32)
     >>> si_model.layers[-1].output_shape[1:]
     (1, 26, 26)
+    >>> ct_pos = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest CT', 1, 8), ('XYZPos', 3, 0)], crop_mode = False, use_bn = False, verbose = False, single_input = True)
+    >>> len(ct_pos.layers)
+    12
+    >>> ct_pos.layers[0].output_shape[1:]
+    (4, 32, 32)
+    >>> ct_pos.layers[-1].output_shape[1:]
+    (1, 32, 32)
+    >>> cct_pos = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest CT', 1, 8), ('XYZPos', 3, 0)], crop_mode = True, use_bn = False, verbose = False, single_input = True)
+    >>> len(cct_pos.layers)
+    16
+    >>> cct_pos.layers[-1].output_shape[1:]
+    (1, 26, 26)
     """
     conv_op = lambda n_filters, f_width, name, activation='relu', border_mode='same', **kwargs: Convolution2D(n_filters,
                                                                                                               f_width,
@@ -267,7 +299,7 @@ def build_2d_umodel(in_img,
                             dropout_rate=dropout_rate,
                             last_layer_depth=last_layer_depth,
                             use_bn=use_bn,
-                            use_b_conv = use_b_conv,
+                            use_b_conv=use_b_conv,
                             crop_mode=crop_mode,
                             single_input=single_input,
                             verbose=verbose)
@@ -275,6 +307,7 @@ def build_2d_umodel(in_img,
 
 if __name__ == "__main__":
     import doctest
+    # noinspection PyUnresolvedReferences
     from pyqae.dnn import petnet
 
-    doctest.testmod(petnet, verbose=True, report=True)
+    doctest.testmod(petnet, verbose=True)

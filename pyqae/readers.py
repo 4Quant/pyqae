@@ -1,8 +1,8 @@
 import errno
 import fnmatch
 import glob
-import os
 import logging
+import os
 
 # library reorganization between Python 2 and 3
 try:
@@ -15,8 +15,10 @@ from six.moves import filter
 from six import next
 
 from .utils import check_spark
+
 spark = check_spark()
 logging.getLogger('boto').setLevel(logging.CRITICAL)
+
 
 def addextension(path, ext=None):
     """
@@ -29,7 +31,7 @@ def addextension(path, ext=None):
             return path
         else:
             if not ext.startswith('.'):
-                ext = '.'+ext
+                ext = '.' + ext
             if not path.endswith(ext):
                 if not path.endswith(os.path.sep):
                     path += os.path.sep
@@ -38,6 +40,7 @@ def addextension(path, ext=None):
                 return path
     else:
         return path
+
 
 def select(files, start, stop):
     """
@@ -50,6 +53,7 @@ def select(files, start, stop):
             stop = len(files)
         files = files[start:stop]
     return files
+
 
 def readlocal(path, offset=None, size=-1):
     """
@@ -69,6 +73,7 @@ def readlocal(path, offset=None, size=-1):
             raise
     return buf
 
+
 def listrecursive(path, ext=None):
     """
     List files recurisvely
@@ -82,6 +87,7 @@ def listrecursive(path, ext=None):
     filenames = list(filenames)
     filenames.sort()
     return sorted(filenames)
+
 
 def listflat(path, ext=None):
     """
@@ -97,6 +103,7 @@ def listflat(path, ext=None):
     # filter out directories
     files = [fpath for fpath in files if not os.path.isdir(fpath)]
     return sorted(files)
+
 
 def uri_to_path(uri):
     path = url2pathname(urlparse(uri).path)
@@ -117,6 +124,7 @@ class LocalParallelReader(object):
     """
     Parallel reader backed by python's native file() objects.
     """
+
     def __init__(self, engine=None, **kwargs):
         self.engine = engine
         self.nfiles = None
@@ -158,6 +166,7 @@ class LocalFileReader(object):
     """
     File reader backed by python's native file() objects.
     """
+
     def __init__(self, **kwargs):
         pass
 
@@ -218,6 +227,7 @@ class BotoClient(object):
     """
     Superclass for boto-based S3 and Google storage readers.
     """
+
     def __init__(self, credentials=None):
         self.credentials = credentials if credentials else {'access': None, 'secret': None}
 
@@ -312,6 +322,7 @@ class BotoParallelReader(BotoClient):
     """
     Parallel reader backed by boto AWS client library.
     """
+
     def __init__(self, engine, credentials=None):
         super(BotoParallelReader, self).__init__(credentials=credentials)
         self.engine = engine
@@ -421,6 +432,7 @@ class BotoFileReader(BotoClient):
     """
     File reader backed by boto.
     """
+
     def getkeys(self, path, filename=None, directories=False, recursive=False):
         """
         Get matching keys for a path
@@ -449,7 +461,7 @@ class BotoFileReader(BotoClient):
                 else:
                     index = key.rfind("/")
                     if index >= 0:
-                        key = key[:(index+1)]
+                        key = key[:(index + 1)]
                     else:
                         key = ""
             key += filename
@@ -523,6 +535,7 @@ class BotoReadFileHandle(object):
 
     Returned by BotoFileReader's open() method.
     """
+
     def __init__(self, scheme, key):
         self._scheme = scheme
         self._key = key
@@ -604,6 +617,7 @@ SCHEMAS_TO_FILEREADERS = {
     'ftp': None
 }
 
+
 def normalize_scheme(path, ext):
     """
     Normalize scheme for paths related to hdfs
@@ -623,6 +637,7 @@ def normalize_scheme(path, ext):
             dirname = os.path.abspath(dirname)
             path = os.path.join(dirname, filename)
         return "file://" + path
+
 
 def get_by_scheme(path, lookup, default):
     """
