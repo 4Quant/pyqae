@@ -20,9 +20,12 @@ from keras.layers import Convolution2D, MaxPooling2D, UpSampling2D
 from keras.layers import merge, Input
 import numpy as np
 from pyqae.dnn import fix_name_tf
+from pyqae.utils import Tuple, List, Dict, Any, Optional
 
 
-def build_nd_umodel(in_shape, layers, depth,
+def build_nd_umodel(in_shape, # type: Tuple[int, int, int]
+                    layers,
+                    depth,
                     conv_op, pool_op, upscale_op,
                     crop_op,
                     layer_size_fcn=lambda i: 3,

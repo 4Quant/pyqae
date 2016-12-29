@@ -339,16 +339,14 @@ def show_itk_image(img, title=None, margin=0.05, dpi=80):
         return fig
 
     try:
-        from ipywidgets import interact, interactive
-        from ipywidgets import widgets
+        from ipywidgets import interact
+        return interact(lambda z: callback(z), z=(0, nda.shape[0] - 1))
     except ImportError:
         if slicer: print("Slicer can only be used inside of IPython")
         slicer = False
-
-    if slicer:
-        interact(lambda z: callback(z), z=(0, nda.shape[0] - 1))
-    else:
+        interact = None
         return callback()
+
 
 
 def show_itk_image3d(img, xslices=[], yslices=[], zslices=[], title=None, margin=0.05, dpi=80):
