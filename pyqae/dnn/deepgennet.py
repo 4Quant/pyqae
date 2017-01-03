@@ -1,11 +1,13 @@
 from __future__ import print_function, division, absolute_import
 
+import os
+
 __doc__ = """
 DeepGenNet is a generative model going from a single input vector to an output image by progressive
-UpSampling, Convolution and Concatenations
+UpSampling, Convolution and Concatenations.
+The DGN is particularly good at using fully connected layers to store lots of basic structural information about
+a given problem and allow the convolutions to focus on relevant features
 """
-
-import os
 
 try:
     assert os.environ['KERAS_BACKEND'] == 'theano', "Theano backend is expected!"
@@ -13,28 +15,41 @@ except KeyError:
     print("Backend for keras is undefined setting to theano for DeepGenNet")
     os.environ['KERAS_BACKEND'] = 'theano'
 
+# noinspection PyPep8Naming,PyPep8
 from keras import backend as K
 
 K.set_image_dim_ordering('th')
-
+# noinspection PyPep8
 from keras.models import Model
+# noinspection PyPep8
 from keras.layers import Convolution2D, UpSampling2D
+# noinspection PyPep8
 from keras.layers import merge, Input, Reshape, Dense, Dropout
-from pyqae.dnn import fix_name_tf
 
-def create_tweennet(in_length = 128,
-                    layers = 4,
-                    f_size = (1, 128, 128),
-                    dropout_rate = 0.5,
+# noinspection PyPep8
+from pyqae.dnn import fix_name_tf
+# noinspection PyPep8
+from pyqae.utils import List, Optional
+
+
+# noinspection PyPep8
+def create_tweennet(in_length=128,
+                    layers=4,
+                    f_size=(1, 128, 128),
+                    dropout_rate=0.5,
                     us_size=(2, 2),
                     **kwargs
                     ):
     """
+    TweenNet is a simple wrapper function for DGN to create a given size image with a fixed number of layers
 
     :param in_length:
     :param layers:
     :param f_size:
-    :return:
+    :param dropout_rate:
+    :param us_size:
+    :param kwargs: arguments to be passed on to build_dgnet_2d
+    :return: keras model
     >>> simple_mod = create_tweennet(1024, 4, (3, 128, 128))
     >>> len(simple_mod.layers)
     29
@@ -55,29 +70,30 @@ def create_tweennet(in_length = 128,
     (1, 256, 128)
     """
     out_depth, f_xwid, f_ywid = f_size
-    starting_size = f_xwid // (us_size[0]**layers), f_ywid // (us_size[1]**layers)
-    s_depths = [in_length // (starting_size[0]*(us_size[0]**i)*starting_size[1]*(us_size[1]**i)) for i in range(layers+1)]
-    s_depths = [max(x,1) for x in s_depths]
-    return build_dgnet_2d(in_size = in_length,
-                          s_depths = s_depths,
-                         starting_size=starting_size,
-                          out_depth = out_depth,
-                          us_size = us_size,
-                          dropout_rate = dropout_rate,
+    starting_size = f_xwid // (us_size[0] ** layers), f_ywid // (us_size[1] ** layers)
+    s_depths = [in_length // (starting_size[0] * (us_size[0] ** i) * starting_size[1] * (us_size[1] ** i)) for i in
+                range(layers + 1)]
+    s_depths = [max(x, 1) for x in s_depths]
+    return build_dgnet_2d(in_size=in_length,
+                          s_depths=s_depths,
+                          starting_size=starting_size,
+                          out_depth=out_depth,
+                          us_size=us_size,
+                          dropout_rate=dropout_rate,
                           **kwargs
                           )
 
 
-
-def build_dgnet_2d(in_size,
-                   s_depths,
-                   conv_depths=None,
+def build_dgnet_2d(in_size,  # type: int
+                   s_depths,  # type: List[int]
+                   conv_depths=None,  # type: Optional[List[int]]
                    us_size=(2, 2),
                    starting_size=(2, 2),
                    activation='relu',
                    cnn_size=(3, 3),
                    out_depth=1,
-                   dropout_rate = 0):
+                   dropout_rate=0  # type: float
+                   ):
     """
     Create the DeepGenerative Network
     :param in_size:
@@ -114,10 +130,11 @@ def build_dgnet_2d(in_size,
     >>> [(x.name, x.output_shape[1:]) for x in full_mod.layers if x.name.find('Fully')>=0]
     [('Fully-Connected-0', (16,)), ('Fully-Connected-1', (32,)), ('Fully-Connected-2', (64,))]
     """
+    assert all(map(lambda x: x>0, s_depths)), "All Depth Dimensions need to be >0, {}".format(s_depths)
     if conv_depths is None:
         s_depths = list(s_depths)
-        conv_depths = [s_depths[0]] + s_depths[:-1] # shift by one
-    s_node = Input(shape=(in_size,), name = fix_name_tf('Input'))
+        conv_depths = [s_depths[0]] + s_depths[:-1]  # shift by one
+    s_node = Input(shape=(in_size,), name=fix_name_tf('Input'))
     last_layer = None
     for i, (i_depth, c_depth) in enumerate(zip(s_depths, conv_depths)):
         xwid, ywid = starting_size[0] * (us_size[0] ** i), starting_size[1] * (us_size[1] ** i)
@@ -126,8 +143,8 @@ def build_dgnet_2d(in_size,
                        name=fix_name_tf('Fully Connected [{}]'.format(i))
                        )(s_node)
 
-        if dropout_rate>0:
-            d_node = Dropout(dropout_rate, name= fix_name_tf('Dropout [{}]'.format(i)))(d_node)
+        if dropout_rate > 0:
+            d_node = Dropout(dropout_rate, name=fix_name_tf('Dropout [{}]'.format(i)))(d_node)
 
         r_node = Reshape(target_shape=(i_depth, xwid, ywid),
                          name=fix_name_tf('Reshape [{}]'.format(i)))(d_node)
