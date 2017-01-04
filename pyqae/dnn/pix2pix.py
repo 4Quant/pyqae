@@ -331,6 +331,7 @@ def load(model_name, img_dim, nb_patch, bn_mode, use_mbd, batch_size, out_path_f
     :param out_path_fmt:
     :return:
     >>> SAVE_FIGURES = True
+    >>> VERBOSE = False
     >>> n_model = load("generator_unet_upsampling", (32, 32, 3), 16, 2, False, 32, out_path_fmt='%s.png')
     >>> len(n_model.layers)
     41
@@ -339,9 +340,15 @@ def load(model_name, img_dim, nb_patch, bn_mode, use_mbd, batch_size, out_path_f
     49
     >>> u_model.layers[-1].output_shape[1:]
     (64, 64, 1)
-    >>> dcg_model = load("DCGAN_discriminator",(64, 64, 1), 8, True, True, False)
+    >>> dcg_model = load("DCGAN_discriminator",(64, 64, 1), 8, True, True, False)  # doctest: +ELLIPSIS
+    PatchGAN summary
+    ...
+    discriminator_input (InputLayer) (None, 64, 64, 1)     0
+    ...
+    Total params: 3916674
+    ...
     >>> [(ilay.name, ilay.output_shape[1:]) for ilay in dcg_model.layers]
-    [('disc_input_0', (64, 64, 1)), ('disc_input_1', (64, 64, 1)), ('disc_input_2', (64, 64, 1)), ('disc_input_3', (64, 64, 1)), ('disc_input_4', (64, 64, 1)), ('disc_input_5', (64, 64, 1)), ('disc_input_6', (64, 64, 1)), ('disc_input_7', (64, 64, 1)), ('PatchGAN', [(None, 2048)]), ('merge_feat_mbd', (16384,)), ('dense_1', (500,)), ('reshape_1', (100, 5)), ('merge_feat', (16,)), ('lambda_5', (100,)), ('merge_15', (116,)), ('disc_output', (2,))]
+    [('disc_input_0', (64, 64, 1)), ('disc_input_1', (64, 64, 1)), ('disc_input_2', (64, 64, 1)), ('disc_input_3', (64, 64, 1)), ('disc_input_4', (64, 64, 1)), ('disc_input_5', (64, 64, 1)), ('disc_input_6', (64, 64, 1)), ('disc_input_7', (64, 64, 1)), ('PatchGAN', [(None, 2048)]), ('merge_feat_mbd', (16384,)), ('dense_1', (500,)), ('reshape_1', (100, 5)), ('merge_feat', (16,)), ('lambda_2', (100,)), ('merge_15', (116,)), ('disc_output', (2,))]
     >>> len(dcg_model.layers)
     16
     >>> dcg_model.layers[-1].output_shape[1:]
@@ -386,7 +393,7 @@ def build_models(
     :param image_dim_ordering:
     :return:
     >>> SAVE_FIGURES = False
-    >>> a,b,c = build_models((64, 64, 1), (64, 64, 1), True, False, 8, (64, 64  ))
+    >>> a,b,c = build_models((64, 64, 1), (64, 64, 1), True, False, 8, (64, 64 ))
     """
 
     assert generator in ["upsampling"], "The only models supported right now are upsampling (deconv doesnt work yet)"
@@ -547,4 +554,4 @@ if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
     from pyqae.dnn import pix2pix
-    doctest.testmod(pix2pix, verbose=True)
+    doctest.testmod(pix2pix, verbose=True, optionflags=doctest.ELLIPSIS)

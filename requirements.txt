@@ -13,4 +13,5 @@ keras >= 1.0
 # thunder-python >= 1.4.2
 pandas >= 0.17.1
 requests >= 2.9.1
+pynrrd >= 0.2.1
 # simplejson >= 2.0.9
