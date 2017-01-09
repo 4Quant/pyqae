@@ -10,7 +10,7 @@ package_files = ['pyqae'] \
 version = '0.20'
 
 setup(
-    name='pyqae-python',
+    name='pyqae',
     version=version,
     description='large-scale image and time series analysis',
     author='fourquant',

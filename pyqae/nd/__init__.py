@@ -42,7 +42,7 @@ def meshgridnd_like(in_img,
     array([0, 1, 2])
     >>> zz[0,0,:]
     array([0, 1, 2, 3])
-    >>> zz
+    >>> zz.astype(int)
     array([[[0, 1, 2, 3],
             [0, 1, 2, 3],
             [0, 1, 2, 3]],
@@ -365,3 +365,10 @@ def uniform_nd_bias_sampler(x_arr, count=1, base_p=0.5, axis=0, cut_off_val=None
     d_mat[c_mat == 0] = new_p
     d_mat /= d_mat.sum()
     return np.random.choice(np.arange(x_arr.shape[axis]), size=count, replace=True, p=d_mat)
+
+
+if __name__ == '__main__':
+    import doctest
+    # noinspection PyUnresolvedReferences
+    from pyqae import nd
+    doctest.testmod(nd, verbose=True, optionflags=doctest.ELLIPSIS)
