@@ -10,7 +10,9 @@ from numpy import ndarray
 from numpy import stack
 import os
 from skimage.io import imsave
+import warnings
 from pyqae.utils import Optional, List, Tuple
+
 
 
 def meshgridnd_like(in_img,
@@ -243,8 +245,48 @@ def get_bbox(in_vol,
 
 
 def apply_bbox(in_vol,  # type: np.ndarray
-               bbox_list  # type: List[(int,int)]
+               bbox_list,  # type: List[Tuple[int,int]]
+               pad_values = False,
+               padding_mode = 'edge'
                ):
+    # type: (...) -> np.ndarray
+    """
+    Apply a bounding box to an image
+    :param in_vol:
+    :param bbox_list:
+    :param pad_values: expand the image so that negative regions show up as
+    well (the size of the output is max-min), default is the same as numpy
+    :param padding_mode: the mode to use, see numpy.pad
+    :return:
+    >>> apply_bbox(np.eye(4).astype(np.uint8), [(-5,2), (0,2)])
+    array([[1, 0],
+           [0, 1]], dtype=uint8)
+    >>> warnings.filterwarnings('ignore') # not finished yet
+    >>> apply_bbox(np.eye(4).astype(np.uint8), [(-2,2), (0,2)], True)
+    array([[1, 0],
+           [1, 0],
+           [1, 0],
+           [0, 1]], dtype=uint8)
+    >>> apply_bbox(np.eye(4).astype(np.uint8), [(0,2), (-2,2)], True).shape
+    (2, 4)
+    """
+
+    if pad_values:
+        # TODO test padding
+        warnings.warn("Padded apply_bbox not fully tested yet", RuntimeWarning)
+        n_pads = [] # type: List[Tuple[int,int]]
+        n_bbox = [] # type: List[Tuple[int, int]]
+        for dim_idx, ((a, b), dim_size) in enumerate(zip(bbox_list,
+                                                      in_vol.shape)):
+            a_pad = 0 if a>=0 else -a
+            b_pad = 0 if b<dim_size else b-dim_size+1
+            n_pads += [(a_pad, b_pad)]
+            n_bbox += [(a+a_pad, b+a_pad)] # adjust the box
+        # update the volume
+        in_vol = np.pad(in_vol, n_pads, mode = padding_mode)
+        # update the bounding box list
+        bbox_list = n_bbox
+
     return in_vol.__getitem__([slice(a, b, 1) for (a, b) in bbox_list])
 
 
@@ -278,6 +320,27 @@ def autocrop(in_vol,  # type: np.ndarray
     return apply_bbox(in_vol, get_bbox(in_vol,
                                        min_val=min_val))
 
+
+def stretch_box(min_val, max_val, new_wid):
+    # type: (int, int, int) -> Tuple[int, int]
+    """
+    For changing range widths without moving the center (much)
+    :param min_val:
+    :param max_val:
+    :param new_wid: the new width of the range
+    :return: the new minimum and maximum values
+    Examples
+    ----
+    >>> stretch_box(0, 10, 20) # making the range 0-10 have a width of 20
+    (-5, 15)
+    >>> stretch_box(10, 20, 5) # making the range 10-20 have the width of 5
+    (12, 17)
+    """
+    old_wid = max_val - min_val
+    hwid = int(round((new_wid-old_wid)/2))
+    new_min = min_val-hwid
+    new_max = new_min+new_wid
+    return (new_min, new_max)
 
 from scipy.ndimage import zoom
 
