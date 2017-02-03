@@ -5,16 +5,21 @@ import pandas as pd
 from warnings import filterwarnings, warn
 from sklearn.feature_extraction.text import strip_accents_ascii
 from sklearn.feature_extraction.text import CountVectorizer
+from warnings import warn
 
 __doc___ = """The basic NLP tools needed for the PYQAE toolset, including
 parsing RTF data, basic word tokenizer and feature extraction,
 plus stop-words for german"""
 
 _dswl_list = 'https://gist.githubusercontent.com/kmader/bb889170010d4b9c90a4e7f66107b94b/raw/d3df37bd770d86a60f1250e675ffd6948f7bf7cc/stop_words.txt'
-
-with urllib.request.urlopen(_dswl_list) as resp:
-    deutsch_stop_words = resp.read().decode().split(',')
-    ascii_de_stop_words = [strip_accents_ascii(x) for x in deutsch_stop_words]
+try:
+    with urllib.request.urlopen(_dswl_list) as resp:
+        deutsch_stop_words = resp.read().decode().split(',')
+        ascii_de_stop_words = [strip_accents_ascii(x) for x in deutsch_stop_words]
+except urllib.error.URLError as e:
+    warn("Stop word list could not be loaded, using an empty list!", RuntimeWarning)
+    deutsch_stop_words = []
+    ascii_de_stop_words = []
 
 def _check_de_stop_words():
     """

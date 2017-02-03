@@ -6,13 +6,6 @@ from io import BytesIO, StringIO
 import pandas as pd
 from skimage.io import imread
 
-try:
-    from dicom import read_file as read_dicom_file
-except:
-    def read_dicom_file(*args, **kwargs):
-        raise Exception("Dicom Library is not available")
-
-
 def _setup():
     import logging
     logger = logging.getLogger(__name__)
