@@ -31,6 +31,29 @@ def _check_de_stop_words():
     pass
 
 
+def remove_umlauts(in_txt):
+    """
+
+    :param in_txt:
+    :return:
+    Examples
+    ------
+    >>> remove_umlauts('örlikon')
+    'oerlikon'
+    >>> remove_umlauts('üetliberg')
+    'ueetliberg'
+    >>> remove_umlauts('Äpfel')
+    'Aepfel'
+    """
+    out_txt = in_txt.replace('ä', 'aa')
+    out_txt = out_txt.replace('ü', 'ue')
+    out_txt = out_txt.replace('ö', 'oe')
+    out_txt = out_txt.replace('Ä', 'Ae')
+    out_txt = out_txt.replace('Ü', 'Ue')
+    out_txt = out_txt.replace('Ö', 'Oe')
+    return out_txt
+
+
 def create_word_matrix(in_df, txt_col, stop_words = ascii_de_stop_words):
     """
     Creates a matrix of words with their respective counts and appends it to the existing DataFrame

@@ -67,8 +67,14 @@ MAX_COMP_LIMIT = 50
 
 def draw_3d_labels(in_bone_labels,  # type: np.ndarray
                    start_idx=1,  # type: int
-                   rescale_func=None):
-    # type: (...) -> Tuple[Axes3D, plt.Figure]
+                   rescale_func=None,
+                   vox_size = None,
+                   verbose = False,
+                   level = 0,
+                   figsize = (10, 12),
+                   force_shape = True,
+                   flip = True):
+    # type: (...) -> Tuple[Axes3D, matplotlib.figure.Figure]
     # somehow add type to rescale_fun Optional[Function(np.ndarray, np.ndarray)]
 
     """
@@ -77,25 +83,44 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
     :param start_idx:
     :param rescale_func: a function to downscale the images (if needed)
     :return:
+    >>> test_labels = np.stack([np.eye(3),2*np.eye(3)]).astype(int); tvx = np.array([0.1, 3.0, 0.33])
+    >>> ax, fig = draw_3d_labels(test_labels, verbose = True)
+    Adding meshes 1, sized 3.0
+    Adding meshes 2, sized 3.0
+    >>> type(ax)
+    <class 'matplotlib.axes._subplots.Axes3DSubplot'>
+    >>> type(fig)
+    <class 'matplotlib.figure.Figure'>
     """
     # todo I don't think the Function typing is correct
 
-    plt.rcParams['savefig.bbox'] = 'tight'
-    fig = plt.figure(figsize=(10, 12))
+    #plt.rcParams['savefig.bbox'] = 'tight'
+    fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection='3d')
     # Fancy indexing: `verts[faces]` to generate a collection of triangles
     cmap = plt.cm.get_cmap('nipy_spectral_r')
     max_comp = in_bone_labels.max()
 
     rescale_func = rescale_func if rescale_func is not None else lambda x: x
-    ax_flip = lambda x: rescale_func(x)[::-1].swapaxes(0, 2).swapaxes(0, 1)
-    for i in range(start_idx, min(max_comp, MAX_COMP_LIMIT)):
+    if flip:
+        ax_flip = lambda x: rescale_func(x)[::-1].swapaxes(0, 2).swapaxes(0, 1)
+    else:
+        ax_flip = lambda x: rescale_func(x)
+
+    for i in range(start_idx, min(max_comp, MAX_COMP_LIMIT)+1):
+
         if i == 0:
             v_img = ax_flip((in_bone_labels > 0).astype(np.float32))
         else:
             v_img = ax_flip((in_bone_labels == i).astype(np.float32))
+        if verbose:
+            print('Adding meshes {}, sized {}'.format(i, np.sum(v_img)))
+        mc_args = {'level': level}
+        if vox_size is not None:
+            mc_args['spacing'] = vox_size
 
-        verts, faces = marching_cubes(v_img, level=0)
+        verts, faces = marching_cubes(v_img, **mc_args)
+
         mesh = Poly3DCollection(verts[faces])
 
         if i > 0:
@@ -109,9 +134,12 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
 
         ax.add_collection3d(mesh)
     n_shape = ax_flip(in_bone_labels).shape
-    ax.set_xlim(0, n_shape[0])
-    ax.set_ylim(0, n_shape[1])
-    ax.set_zlim(0, n_shape[2])
+    if force_shape:
+        ax.set_xlim(0, n_shape[0])
+        ax.set_ylim(0, n_shape[1])
+        ax.set_zlim(0, n_shape[2])
+    else:
+        pass # ax.set_aspect('equal')
     ax.view_init(45, 45)
     ax.axis('off')
     return ax, fig
@@ -208,3 +236,11 @@ def draw_3d_label_animation(in_bone_labels,
         fig.clf()
         plt.close('all')
     return out_la
+
+if __name__ == '__main__':
+    import doctest
+    # noinspection PyUnresolvedReferences
+    import pyqae.viz
+
+    doctest.testmod(pyqae.viz, verbose=True,
+                    optionflags=doctest.ELLIPSIS)
