@@ -28,7 +28,6 @@ import numpy as np
 from pyqae.utils import Tuple, List, Dict, Any, Optional
 from pyqae.dnn import fix_name_tf
 
-
 def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
                      layers,  # type: int
                      branches,  # type: List[Tuple[str, int, int]]

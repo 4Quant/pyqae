@@ -68,6 +68,7 @@ class LazyImagePillowBackend(LazyImageBackend):
 
 
 backends = [LazyImagePillowBackend]  # type: List[LazyImageBackend]
+
 try:
     from osgeo import gdal
 
@@ -237,6 +238,40 @@ def paths_to_tiled_image(paths, context=None, tile_size=(256, 256), padding=(0, 
     if skip_chunk: return ca_data
     return ca_data._chunk(size=tile_size, axis=None, padding=padding)
 
+
+from itertools import product
+def parallel_tile_image(paths, # type: Union[List[str], RDD[str]]
+                         context = None, # type: SparkContext
+                         backend=backends[-1], # type: LazyImageBackend
+                         tile_w = 512,
+                         tile_h = None, # type: Optional[int]
+                         **kwargs):
+    # type: (...) -> RDD[Tuple(int, int, int), np.ndarray]
+    """
+    A function to read tiles in in parallel
+    :param paths: a list of paths to read from
+    :param context: the spark context (or local spark context)
+    :param backend: the backend for reading
+    :param tile_w: the tile width
+    :param tile_h: the tile height
+    :param kwargs: arguments for parallelize
+    :return:
+    """
+    path_rdd = paths if isinstance(paths, RDD) else context.parallelize(paths, **kwargs)
+    _create_dmzi = lambda fle_path: DiskMappedLazyImage(fle_path, backend)
+    img_rdd = path_rdd.zipWithIndex().map(lambda x: (x[1], _create_dmzi(x[0])))
+    if tile_h is None:
+        tile_h = tile_w
+    _, c_img = img_rdd.first()
+    start_x = np.arange(0, c_img.shape[0], tile_w)
+    start_y = np.arange(0, c_img.shape[1], tile_h)
+    start_xy = product(start_x, start_y)
+    tile_ij_rdd = context.parallelize(start_xy, **kwargs)
+    all_tiles = img_rdd.cartesian(tile_ij_rdd)
+    def _clean_tile_order(x):
+        (img_id, img_data), (tile_i, tile_j) = x
+        return (img_id, tile_i, tile_j), img_data[tile_i:tile_i+tile_w, tile_j:tile_j+tile_h]
+    return all_tiles.map(_clean_tile_order)
 
 def single_chunky_image(in_ds, context, tile_size=(256, 256), padding=(0, 0)):
     in_rdd = context.parallelize([((0,), in_ds)])

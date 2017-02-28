@@ -178,3 +178,10 @@ def create_segnet(img_rows=360, img_cols=480, img_channels=3, kernel=3, filter_s
     autoencoder.add(Permute((2, 1)))
     autoencoder.add(Activation('softmax'))
     return autoencoder
+
+if __name__ == "__main__":
+    import doctest
+    # noinspection PyUnresolvedReferences
+    from pyqae.dnn import models
+
+    doctest.testmod(models, verbose=True)

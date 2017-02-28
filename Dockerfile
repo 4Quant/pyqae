@@ -98,6 +98,11 @@ RUN pip --no-cache-dir install 'keras==1.1.2'
 
 # Simple ITK
 RUN conda install --channel https://conda.anaconda.org/SimpleITK --quiet --yes 'SimpleITK=0.10.0'
+
+# Nibabel
+RUN conda install --channel https://conda.anaconda.org/conda-forge --quiet --yes 'nibabel=2.1.0'
+
+
 # GDAL
 # RUN conda install --channel https://conda.anaconda.org/conda-forge --quiet --yes 'gdal=2.1.2'
 # RUN pip install -i https://pypi.anaconda.org/pypi/simple 'pygdal==1.11.0.0'

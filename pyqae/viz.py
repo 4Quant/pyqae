@@ -113,9 +113,11 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
             v_img = ax_flip((in_bone_labels > 0).astype(np.float32))
         else:
             v_img = ax_flip((in_bone_labels == i).astype(np.float32))
+
         if verbose:
             print('Adding meshes {}, sized {}'.format(i, np.sum(v_img)))
         mc_args = {'level': level}
+
         if vox_size is not None:
             mc_args['spacing'] = vox_size
 
