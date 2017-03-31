@@ -61,7 +61,9 @@ def build_nd_umodel(in_shape, # type: Tuple[int, int, int]
 
         pool_layers += [pool_op(pool_size, name='Downscaling [{}]'.format(ilay))(last_layer)]
         if use_bn:
-            last_layer = BatchNormalization(name=fix_name_tf('Batch Normalization [{}]'.format(ilay)))(pool_layers[-1])
+            last_layer = BatchNormalization(
+                mode=0, axis=1,  # TODO: change this for tensorflow
+                name=fix_name_tf('Batch Normalization [{}]'.format(ilay)))(pool_layers[-1])
         else:
             last_layer = pool_layers[-1]
         lay_depth = depth * np.power(2, ilay + 1)

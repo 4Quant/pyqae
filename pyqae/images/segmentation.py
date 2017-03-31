@@ -117,6 +117,7 @@ from skimage.morphology import convex_hull as ch
 
 
 def convex_hull_slice(in_img):
+    # type: (np.ndarray) -> np.ndarray
     if in_img.max() == 0:
         return in_img
 
@@ -129,4 +130,5 @@ def convex_hull_slice(in_img):
 
 def convex_hull_3d(in_img):
     # type: (np.ndarray) -> np.ndarray
-    return np.stack([convex_hull_slice(c_slice > 0) for c_slice in in_img])
+    return np.stack([convex_hull_slice(np.array(c_slice > 0)) for c_slice in
+                     in_img])

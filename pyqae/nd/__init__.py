@@ -14,7 +14,6 @@ import warnings
 from pyqae.utils import Optional, List, Tuple
 
 
-
 def meshgridnd_like(in_img,
                     rng_func=range):
     """
@@ -84,12 +83,17 @@ def filt_tensor(image_stack,  # type: ndarray
     :return: a 4D tensor object of the same size
     """
 
-    assert len(image_stack.shape) == 4, "Operations are intended for 4D inputs, {}".format(image_stack.shape)
-    assert isinstance(image_stack, raw_array), "Can only be performed on BoltArray Objects"
+    assert len(
+        image_stack.shape) == 4, "Operations are intended for 4D inputs, {}".format(
+        image_stack.shape)
+    assert isinstance(image_stack,
+                      raw_array), "Can only be performed on BoltArray Objects"
     chunk_image = image_stack.chunk(size=tile_size, padding=padding)
     filt_img = chunk_image.map(
-        lambda col_img: stack([filter_op(x, *filter_args, **filter_kwargs) for x in col_img.swapaxes(0, 2)],
-                              0).swapaxes(0, 2))
+        lambda col_img: stack(
+            [filter_op(x, *filter_args, **filter_kwargs) for x in
+             col_img.swapaxes(0, 2)],
+            0).swapaxes(0, 2))
     return filt_img.unchunk()
 
 
@@ -108,7 +112,8 @@ def tensor_from_rdd(in_rdd,  # type: RDD
     :return: a distributed ND array containing the full tensor
     """
     in_rdd = in_rdd if sort_func is None else in_rdd.sortBy(sort_func)
-    zip_rdd = in_rdd.zipWithIndex().map(lambda x: (x[1], extract_array(x[0]))) if make_idx is None else in_rdd.map(
+    zip_rdd = in_rdd.zipWithIndex().map(lambda x: (
+    x[1], extract_array(x[0]))) if make_idx is None else in_rdd.map(
         lambda x: (make_idx(x), extract_array(x)))
     key, val = zip_rdd.first()
     if len(val.shape) == 2:
@@ -158,10 +163,12 @@ def fromrdd(rdd,
             k = (k,)
         return k, v
 
-    return raw_array(rdd.map(process_keys), shape=(nrecords,) + tuple(dims), dtype=dtype, split=1, ordered=ordered)
+    return raw_array(rdd.map(process_keys), shape=(nrecords,) + tuple(dims),
+                     dtype=dtype, split=1, ordered=ordered)
 
 
-def save_tensor_local(in_bolt_array, base_path, allow_overwrite=False, file_ext='tif'):
+def save_tensor_local(in_bolt_array, base_path, allow_overwrite=False,
+                      file_ext='tif'):
     """
     Save a bolt_array on local (shared directory) paths
     :param in_bolt_array: the bolt array object
@@ -174,11 +181,14 @@ def save_tensor_local(in_bolt_array, base_path, allow_overwrite=False, file_ext=
     except:
         print('{} already exists'.format(base_path))
         if not allow_overwrite: raise RuntimeError(
-            "Overwriting has not been enabled! Please remove directory {}".format(base_path))
+            "Overwriting has not been enabled! Please remove directory {}".format(
+                base_path))
     key_fix = lambda in_keys: "_".join(map(lambda k: "%05d" % (k), in_keys))
 
     in_bolt_array.tordd().map(
-        lambda x: imsave(os.path.join(base_path, "{}.{}".format(key_fix(x[0]), file_ext)), x[1])).collect()
+        lambda x: imsave(
+            os.path.join(base_path, "{}.{}".format(key_fix(x[0]), file_ext)),
+            x[1])).collect()
     return base_path
 
 
@@ -188,7 +198,8 @@ def tensor_to_dataframe(in_bolt_array):
     :param in_bolt_array:  the input bolt array
     :return: a DataFrame with fields `position` and `array_data`
     """
-    return in_bolt_array.tordd().map(lambda x: Row(position=x[0], array_data=x[1].tolist())).toDF()
+    return in_bolt_array.tordd().map(
+        lambda x: Row(position=x[0], array_data=x[1].tolist())).toDF()
 
 
 def save_tensor_parquet(in_bolt_array, out_path):
@@ -246,8 +257,8 @@ def get_bbox(in_vol,
 
 def apply_bbox(in_vol,  # type: np.ndarray
                bbox_list,  # type: List[Tuple[int,int]]
-               pad_values = False,
-               padding_mode = 'edge'
+               pad_values=False,
+               padding_mode='edge'
                ):
     # type: (...) -> np.ndarray
     """
@@ -274,16 +285,16 @@ def apply_bbox(in_vol,  # type: np.ndarray
     if pad_values:
         # TODO test padding
         warnings.warn("Padded apply_bbox not fully tested yet", RuntimeWarning)
-        n_pads = [] # type: List[Tuple[int,int]]
-        n_bbox = [] # type: List[Tuple[int, int]]
+        n_pads = []  # type: List[Tuple[int,int]]
+        n_bbox = []  # type: List[Tuple[int, int]]
         for dim_idx, ((a, b), dim_size) in enumerate(zip(bbox_list,
-                                                      in_vol.shape)):
-            a_pad = 0 if a>=0 else -a
-            b_pad = 0 if b<dim_size else b-dim_size+1
+                                                         in_vol.shape)):
+            a_pad = 0 if a >= 0 else -a
+            b_pad = 0 if b < dim_size else b - dim_size + 1
             n_pads += [(a_pad, b_pad)]
-            n_bbox += [(a+a_pad, b+a_pad)] # adjust the box
+            n_bbox += [(a + a_pad, b + a_pad)]   # adjust the box
         # update the volume
-        in_vol = np.pad(in_vol, n_pads, mode = padding_mode)
+        in_vol = np.pad(in_vol, n_pads, mode=padding_mode)
         # update the bounding box list
         bbox_list = n_bbox
 
@@ -337,17 +348,99 @@ def stretch_box(min_val, max_val, new_wid):
     (12, 17)
     """
     old_wid = max_val - min_val
-    hwid = int(round((new_wid-old_wid)/2))
-    new_min = min_val-hwid
-    new_max = new_min+new_wid
+    hwid = int(round((new_wid - old_wid) / 2))
+    new_min = min_val - hwid
+    new_max = new_min + new_wid
     return (new_min, new_max)
+
+
+def stretch_bbox(in_coords, new_widths):
+    # type: (List[Tuple[int, int]], List[int]) -> List[Tuple[int, int]]
+    """
+    Stretch a bounding box using the stretch_box function so it has a given
+    size
+    :param in_coords:
+    :param new_widths:
+    :return:
+    Examples
+    ----
+    >>> test_box = [(261, 277), (215, 252), (203, 245)]
+    >>> stretch_bbox(test_box, [10, 10, 10])
+    [(264, 274), (229, 239), (219, 229)]
+    """
+    return [stretch_box(min_v, max_v, n_wid) for (min_v, max_v), n_wid in
+            zip(in_coords, new_widths)]
+
+def replace_labels_with_bbox(in_labels, def_box = [20, 20, 20]):
+    # type: (np.ndarray, Union[List[int], bool]) -> np.ndarray
+    """
+    Replaces all of the labels with a bounding or fixed size box
+    :param in_labels: the original label image
+    :param def_box: a box size or False
+    :return:
+    Examples
+    >>> test_image = (np.mod(np.arange(9),3)).reshape((3,3))
+    >>> replace_labels_with_bbox(test_image, [3,3,3]) #doctest: +NORMALIZE_WHITESPACE
+    array([[1, 2, 2],
+       [1, 2, 2],
+       [1, 2, 2]])
+    >>> i_mask = np.mod(np.arange(49),6).reshape((7,7))
+    >>> test_image2 = i_mask*(i_mask<3)
+    >>> replace_labels_with_bbox(test_image2, [3,3,3]) #doctest: +NORMALIZE_WHITESPACE
+    array([[0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 2, 2, 2, 0, 0],
+       [0, 0, 2, 2, 2, 0, 0],
+       [0, 0, 2, 2, 2, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0],
+       [0, 0, 0, 0, 0, 0, 0]])
+    >>> replace_labels_with_bbox(test_image2, False) #doctest: +NORMALIZE_WHITESPACE
+    array([[2, 2, 2, 2, 2, 2, 2],
+           [2, 2, 2, 2, 2, 2, 2],
+           [2, 2, 2, 2, 2, 2, 2],
+           [2, 2, 2, 2, 2, 2, 2],
+           [2, 2, 2, 2, 2, 2, 2],
+           [2, 2, 2, 2, 2, 2, 2],
+           [2, 2, 2, 2, 2, 2, 2]])
+    """
+    new_labels = np.zeros_like(in_labels)
+    for idx in np.unique(in_labels):
+        if idx>0:
+            c_box = get_bbox(in_labels==idx)
+            if def_box:
+                c_box = stretch_bbox(c_box, def_box)
+            new_labels[[slice(*ibox,1) for ibox in c_box]] = idx
+    return new_labels
+
+
+
+def pad_box(in_coords, in_shape, pad_width):
+    """
+    Pad the size of a box (from get_bbox)
+    :param in_coords:
+    :param in_shape:
+    :param pad_width:
+    :return:
+    Examples
+    ------
+    >>> test_box = [(261, 277), (215, 252), (203, 245)]
+    >>> pad_box(test_box, (440, 512, 512), 1000)
+    [(0, 440), (0, 512), (0, 512)]
+    >>> pad_box(test_box, (440, 512, 512), 1)
+    [(260, 278), (214, 253), (202, 246)]
+    """
+    return [(int(np.median([0, min_v - pad_width, box_max_v])),
+             int(np.median([0, max_v + pad_width, box_max_v]))) for
+            (min_v, max_v), box_max_v in zip(in_coords, in_shape)]
+
 
 from scipy.ndimage import zoom
 
 
 def iso_image_rescaler(t_array,  # type: np.ndarray
                        gs_arr,  # type: List[float]
-                       res_func=lambda x: np.max(x),  # type: (np.ndarray) -> float
+                       res_func=lambda x: np.max(x),
+                       # type: (np.ndarray) -> float
                        order=0,
                        verbose=False,
                        **kwargs):
@@ -388,15 +481,21 @@ def change_resolution_array(in_data,  # type: np.ndarray
     """
     if isinstance(new_vox_size, list):
         new_vox_size = np.array(new_vox_size)
-    new_v_size = new_vox_size if isinstance(new_vox_size, np.ndarray) else np.array([new_vox_size] * len(old_vox_size))
-    assert len(new_v_size) == len(old_vox_size), "Voxel size and old spacing " + \
-                                                 "must have the same size {}, {}".format(new_v_size, old_vox_size)
+    new_v_size = new_vox_size if isinstance(new_vox_size,
+                                            np.ndarray) else np.array(
+        [new_vox_size] * len(old_vox_size))
+    assert len(new_v_size) == len(
+        old_vox_size), "Voxel size and old spacing " + \
+                       "must have the same size {}, {}".format(new_v_size,
+                                                               old_vox_size)
     scale_f = np.array(old_vox_size) / new_v_size
     if verbose: print(old_vox_size, '->', new_v_size, ':', scale_f)
-    return zoom(in_data, scale_f, order=order, **kwargs), list(new_v_size.tolist())
+    return zoom(in_data, scale_f, order=order, **kwargs), list(
+        new_v_size.tolist())
 
 
-def uniform_nd_bias_sampler(x_arr, count=1, base_p=0.5, axis=0, cut_off_val=None, ignore_zeros=False):
+def uniform_nd_bias_sampler(x_arr, count=1, base_p=0.5, axis=0,
+                            cut_off_val=None, ignore_zeros=False):
     """
     A tool for intelligently sampling from biased distributions
     :param x_arr:
@@ -422,16 +521,19 @@ def uniform_nd_bias_sampler(x_arr, count=1, base_p=0.5, axis=0, cut_off_val=None
     if cut_off_val is not None:
         c_mat = (c_mat > cut_off_val).astype(np.float32)
     if not ignore_zeros:
-        assert c_mat.sum() > 0, "Input array is has no values above cutoff {}".format(cut_off_val)
+        assert c_mat.sum() > 0, "Input array is has no values above cutoff {}".format(
+            cut_off_val)
     new_p = base_p * np.sum(c_mat) / np.sum(c_mat == 0)
     d_mat = c_mat
     d_mat[c_mat == 0] = new_p
     d_mat /= d_mat.sum()
-    return np.random.choice(np.arange(x_arr.shape[axis]), size=count, replace=True, p=d_mat)
+    return np.random.choice(np.arange(x_arr.shape[axis]), size=count,
+                            replace=True, p=d_mat)
 
 
 if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
     from pyqae import nd
+
     doctest.testmod(nd, verbose=True, optionflags=doctest.ELLIPSIS)

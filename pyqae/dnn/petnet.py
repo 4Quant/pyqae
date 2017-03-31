@@ -41,17 +41,52 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
                      use_b_conv_out=False,  # type: Optional[bool]
                      use_bn=True,
                      verbose=False,
-                     single_input=False):
+                     single_input=False,
+                     input_dict = None # type: Dict[str, Tuple[Object, Object]]
+                     ):
+    """
+
+    :param in_shape:
+    :param layers:
+    :param branches:
+    :param conv_op:
+    :param pool_op:
+    :param upscale_op:
+    :param crop_op:
+    :param layer_size_fcn:
+    :param pool_size:
+    :param dropout_rate:
+    :param last_layer_depth:
+    :param crop_mode:
+    :param use_b_conv:
+    :param use_b_conv_out:
+    :param use_bn:
+    :param verbose:
+    :param single_input:
+    :param input_dict: a dictionary of tuples containing the name of an
+    input as well as the original input and the node to put into the
+    network, it allows preprocessing steps to be done elsewhere
+    :return:
+    """
     border_mode = 'valid' if crop_mode else 'same'
     use_b_conv_out = use_b_conv_out if use_b_conv_out is not None else use_b_conv
     x_wid, y_wid = in_shape
     branch_dict = defaultdict(dict)  # type: Dict[str, Dict[str, Any]]
 
     input_list = []
+    if input_dict is None:
+        input_dict = {}
 
-    def _make_input(*args, **kwargs):  # keep track of all the inputs
-        input_list.append(Input(*args, **kwargs))
-        return input_list[-1]
+    def _make_input(*args, name = 'emptyInput', **kwargs):
+        # keep track of all the inputs
+        if name in input_dict:
+            in_node, cur_node = input_dict[name]
+        else:
+            cur_node = Input(*args, name = name, **kwargs)
+            in_node = cur_node
+
+        input_list.append(in_node)
+        return cur_node
 
     if single_input:
         # this only works with theano ordering
@@ -98,6 +133,7 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
             pool_layers += [pool_op(pool_size, name='{} Downscaling [{}]'.format(branch_id, ilay))(last_layer)]
             if use_bn:
                 last_layer = BatchNormalization(
+                    mode=0, axis=1, # TODO: change this for tensorflow
                     name=fix_name_tf('{} Batch Normalization [{}]'.format(branch_id, ilay)))(pool_layers[-1])
             else:
                 last_layer = pool_layers[-1]
@@ -212,7 +248,8 @@ def build_2d_umodel(in_img,
                     crop_mode=True,
                     use_b_conv=True,
                     verbose=False,
-                    single_input=False
+                    single_input=False,
+                    input_dict = None
                     ):
     """
 
@@ -223,6 +260,7 @@ def build_2d_umodel(in_img,
     :param dropout_rate:
     :param last_layer_depth:
     :param branches:
+    :param input_dict: a dictionary of input nodes
     :return:
     >>> simple_mod = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest XRay', 1, 2)], crop_mode = False, use_bn = False, verbose = False)
     >>> len(simple_mod.layers)
@@ -301,7 +339,8 @@ def build_2d_umodel(in_img,
                             use_b_conv=use_b_conv,
                             crop_mode=crop_mode,
                             single_input=single_input,
-                            verbose=verbose)
+                            verbose=verbose,
+                            input_dict = input_dict)
 
 
 if __name__ == "__main__":

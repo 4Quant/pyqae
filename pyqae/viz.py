@@ -239,6 +239,15 @@ def draw_3d_label_animation(in_bone_labels,
         plt.close('all')
     return out_la
 
+
+def label_score(gt_labels, sp_segs):
+    """
+
+    :param gt_labels:
+    :param sp_segs:
+    :return:
+    """
+
 if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
