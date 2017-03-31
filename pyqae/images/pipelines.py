@@ -65,25 +65,27 @@ def normalize_transform(channel=1):
     >>> new_p2.predict(10+np.arange(18).reshape((2,3,3)))
     array([1, 2])
     """
+
     def _norm_func(in_iter):
-        in_image=np.stack([x for x in in_iter],0)
-        new_image=np.zeros(in_image.shape,dtype=np.float32)
-        if channel>0:
-            new_image=new_image.swapaxes(0,channel)
-            t_in=in_image.swapaxes(0,channel)
+        in_image = np.stack([x for x in in_iter], 0)
+        new_image = np.zeros(in_image.shape, dtype=np.float32)
+        if channel > 0:
+            new_image = new_image.swapaxes(0, channel)
+            t_in = in_image.swapaxes(0, channel)
         else:
-            t_in=in_image
+            t_in = in_image
         for i, c_vol in enumerate(t_in):
             new_image[i] += c_vol
-            mean_val=c_vol.mean()
-            std_val=c_vol.std()
+            mean_val = c_vol.mean()
+            std_val = c_vol.std()
             if not np.isnan(mean_val):
-                new_image[i]-=mean_val
-            if std_val>0:
-                new_image[i]/=std_val
+                new_image[i] -= mean_val
+            if std_val > 0:
+                new_image[i] /= std_val
         if channel > 0:
             new_image = new_image.swapaxes(0, channel)
         return new_image
+
     return ImmutablePipeTransform(
         _norm_func
     )
@@ -436,6 +438,57 @@ def add_distance_transform(use_generator=False, dim_order='tf', img_channel=0):
     return ChannelPipeTransform(chan_fcn, use_generator, dim_order)
 
 
+from skimage.filters import gaussian
+
+
+def add_filter_transform(
+        use_generator=False,
+        dim_order='tf',
+        filter_func=None,
+        image_channel=0,
+        filter_width=0.5,
+        limit_img=True):
+    """
+    Add a distance transform
+    :param use_generator:
+    :param dim_order:
+    :return:
+    >>> p = Pipeline([('add_filter',add_filter_transform(True,'th'))])
+    >>> new_p = p.fit(np.zeros((1,1,2,2)),np.ones((1,1,2,2)))
+    >>> [x.shape for x in new_p.transform(np.arange(18).reshape((2,1,3,3)))]
+    [(2, 3, 3), (2, 3, 3)]
+    >>> p2 = Pipeline([('add_filter',add_filter_transform(False,'tf'))])
+    >>> new_p2 = p2.fit(np.zeros((1,2,2,1)),np.ones((1,2,2,1)))
+    >>> t_img = np.pad(np.ones((3,3)),(1,1),'constant', constant_values=0)
+    >>> out_p2 = new_p2.transform([np.expand_dims(t_img,-1)])
+    >>> out_p2.shape
+    (1, 5, 5, 2)
+    >>> (10*out_p2[0,:,:,0]).astype(int)
+    array([[0, 0, 1, 0, 0],
+           [0, 7, 8, 7, 0],
+           [1, 8, 9, 8, 1],
+           [0, 7, 8, 7, 0],
+           [0, 0, 1, 0, 0]])
+    """
+    if filter_func is None:
+        filter_func = lambda x: gaussian(x, filter_width)
+
+    def _chan_fcn(x_img):
+        c_img = x_img[image_channel]
+        c_min, c_max = c_img.min(), c_img.max()
+
+        if limit_img:
+            c_img = (c_img.astype(np.float32) - c_min) / (c_max - c_min)
+
+        out_img = np.expand_dims(filter_func(c_img), 0)
+        if limit_img:
+            return out_img * (c_max - c_min) + c_min
+        else:
+            return out_img
+
+    return ChannelPipeTransform(_chan_fcn, use_generator, dim_order)
+
+
 from skimage.filters import thresholding as thresh
 
 
@@ -473,6 +526,7 @@ class TrainableThresholdPipeTransform(object):
 
 from skimage.segmentation import slic
 
+
 def add_slic_transform(use_generator=False, dim_order='tf',
                        n_segments=100, compactness=0.1):
     """
@@ -497,20 +551,23 @@ def add_slic_transform(use_generator=False, dim_order='tf',
     """
 
     def _chan_slic_fcn(x_img):
-        n_img=x_img.transpose().astype(np.float32)
-        n_img = n_img-n_img.mean()
+        n_img = x_img.transpose().astype(np.float32)
+        n_img = n_img - n_img.mean()
         n_img /= n_img.std()
-        n_img=n_img.clip(-1,1)
-        slic_segs=slic(n_img,
-                      n_segments=n_segments,
-                      compactness=compactness,
-                      multichannel=True)
+        n_img = n_img.clip(-1, 1)
+        slic_segs = slic(n_img,
+                         n_segments=n_segments,
+                         compactness=compactness,
+                         multichannel=True)
         return np.expand_dims(slic_segs, 0)
+
     def _fz(x_img):
-        print('pos',x_img.transpose().shape)
-        print('out',_chan_slic_fcn(x_img).shape)
-        return np.expand_dims(x_img.transpose()[:,:,0],0)
+        print('pos', x_img.transpose().shape)
+        print('out', _chan_slic_fcn(x_img).shape)
+        return np.expand_dims(x_img.transpose()[:, :, 0], 0)
+
     return ChannelPipeTransform(_chan_slic_fcn, use_generator, dim_order)
+
 
 def add_threshold_transform(min_val=None,
                             max_val=None,
@@ -536,17 +593,17 @@ def add_threshold_transform(min_val=None,
     """
 
     def _chan_fcn(x_img):
-        seg_img=np.ones_like(x_img[image_channel],dtype=bool)
+        seg_img = np.ones_like(x_img[image_channel], dtype=bool)
         if min_val is not None:
-            seg_img&=(x_img[image_channel]>min_val)
+            seg_img &= (x_img[image_channel] > min_val)
         if max_val is not None:
-            seg_img&=(x_img[image_channel]<=max_val)
+            seg_img &= (x_img[image_channel] <= max_val)
         return np.expand_dims(seg_img, 0)
 
     return ChannelPipeTransform(_chan_fcn, use_generator, dim_order)
 
 
-#class SLICTransformer(ParameterFreeTransform):
+# class SLICTransformer(ParameterFreeTransform):
 #    def __init__(self, n_segments, region):
 #        slic()
 
