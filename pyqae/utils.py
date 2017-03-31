@@ -242,6 +242,29 @@ filter_dict = lambda fcn, old_dict: dict(filter(fcn, old_dict.items()))
 dict_append = lambda idct, new_kvs: dict(list(idct.items()) + new_kvs)
 dict_kwappend = lambda idct, **new_kvs: dict(list(idct.items()) + list(new_kvs.items()))
 
+from warnings import warn
+
+def scalar_attributes_list(im_props):
+    """
+    Makes list of all scalar, non-dunder, non-hidden
+    attributes of skimage.measure.regionprops object
+    """
+
+    attributes_list = []
+
+    for i, test_attribute in enumerate(dir(im_props[0])):
+
+        # Attribute should not start with _ and cannot return an array
+        # does not yet return tuples
+        try:
+            if test_attribute[:1] != '_' and not \
+                    isinstance(getattr(im_props[0], test_attribute), np.ndarray):
+                attributes_list += [test_attribute]
+        except Exception as e:
+            warn("Not implemented: {} - {}".format(test_attribute, e), RuntimeWarning)
+
+    return attributes_list
+
 
 def notsupported(mode):
     logging.getLogger('pyqae').warn("Operation not supported in '%s' mode" % mode)
