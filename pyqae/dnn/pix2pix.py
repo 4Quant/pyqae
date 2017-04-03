@@ -16,21 +16,36 @@ from keras import backend as K
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.layers import Input, merge
+
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.normalization import BatchNormalization
 from keras.layers.convolutional import Convolution2D, Deconvolution2D
-from keras.layers.core import Activation, Dropout
 
+from keras.layers.core import Activation, Dropout
 KERAS_2 = keras.__version__[0] == '2'
+try:
+    # keras 2 imports
+    from keras.layers.convolutional import Conv2DTranspose
+    from keras.layers.merge import Concatenate
+except ImportError:
+    print("Keras 2 layers could not be imported defaulting to keras1")
+    KERAS_2 = False
+
 K.set_image_dim_ordering('th')
 
-
+def concatenate_layers(inputs,concat_axis,mode='concat'):
+    if KERAS_2:
+        assert mode=='concat',"Only concatenation is supported in this wrapper"
+        return Concatenate(axis=concat_axis)(inputs)
+    else:
+        return merge(inputs=inputs, concat_axis=concat_axis)
 def Convolution(f, k=3, s=2, border_mode='same', **kwargs):
     """Convenience method for Convolutions."""
     if KERAS_2:
-        return Convolution2D(f, kernel_size=(k, k),
+        return Convolution2D(f,
+                             kernel_size=(k, k),
                              padding=border_mode,
-                             subsample=(s, s),
+                             strides=(s, s),
                              **kwargs)
     else:
         return Convolution2D(f, k, k, border_mode=border_mode,
@@ -41,9 +56,10 @@ def Convolution(f, k=3, s=2, border_mode='same', **kwargs):
 def Deconvolution(f, output_shape, k=2, s=2, **kwargs):
     """Convenience method for Transposed Convolutions."""
     if KERAS_2:
-        return Deconvolution2D(f, (k, k),
+        return Conv2DTranspose(f,
+                               kernel_size=(k, k),
                                output_shape=output_shape,
-                               subsample=(s, s),
+                               strides=(s, s),
                                data_format=K.image_data_format(),
                                **kwargs)
     else:
@@ -74,7 +90,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     TheanoShapedU-NET
     >>> for ilay in unet.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> unet.summary()  #doctest: +NORMALIZE_WHITESPACE
-    _________________________________________________________________
+     _________________________________________________________________
     Layer (type)                 Output Shape              Param #
     =================================================================
     input (InputLayer)           (None, 1, 512, 512)       0
@@ -139,7 +155,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     dropout (Dropout)            (None, 24, 2, 2)          0
     _________________________________________________________________
-    merge (Merge)                (None, 48, 2, 2)          0
+    concatenate (Concatenate)    (None, 48, 2, 2)          0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 48, 2, 2)          0
     _________________________________________________________________
@@ -149,7 +165,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     dropout (Dropout)            (None, 24, 4, 4)          0
     _________________________________________________________________
-    merge (Merge)                (None, 48, 4, 4)          0
+    concatenate (Concatenate)    (None, 48, 4, 4)          0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 48, 4, 4)          0
     _________________________________________________________________
@@ -159,7 +175,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     dropout (Dropout)            (None, 24, 8, 8)          0
     _________________________________________________________________
-    merge (Merge)                (None, 48, 8, 8)          0
+    concatenate (Concatenate)    (None, 48, 8, 8)          0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 48, 8, 8)          0
     _________________________________________________________________
@@ -167,7 +183,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 24, 16, 16)        96
     _________________________________________________________________
-    merge (Merge)                (None, 48, 16, 16)        0
+    concatenate (Concatenate)    (None, 48, 16, 16)        0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 48, 16, 16)        0
     _________________________________________________________________
@@ -175,7 +191,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 24, 32, 32)        96
     _________________________________________________________________
-    merge (Merge)                (None, 48, 32, 32)        0
+    concatenate (Concatenate)    (None, 48, 32, 32)        0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 48, 32, 32)        0
     _________________________________________________________________
@@ -183,7 +199,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 12, 64, 64)        48
     _________________________________________________________________
-    merge (Merge)                (None, 24, 64, 64)        0
+    concatenate (Concatenate)    (None, 24, 64, 64)        0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 24, 64, 64)        0
     _________________________________________________________________
@@ -191,7 +207,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 6, 128, 128)       24
     _________________________________________________________________
-    merge (Merge)                (None, 12, 128, 128)      0
+    concatenate (Concatenate)    (None, 12, 128, 128)      0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 12, 128, 128)      0
     _________________________________________________________________
@@ -199,7 +215,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 3, 256, 256)       12
     _________________________________________________________________
-    merge (Merge)                (None, 6, 256, 256)       0
+    concatenate (Concatenate)    (None, 6, 256, 256)       0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 6, 256, 256)       0
     _________________________________________________________________
@@ -283,7 +299,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     dropout (Dropout)            (None, 2, 2, 16)          0
     _________________________________________________________________
-    merge (Merge)                (None, 2, 2, 32)          0
+    concatenate (Concatenate)    (None, 2, 2, 32)          0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 2, 2, 32)          0
     _________________________________________________________________
@@ -293,7 +309,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     dropout (Dropout)            (None, 4, 4, 16)          0
     _________________________________________________________________
-    merge (Merge)                (None, 4, 4, 32)          0
+    concatenate (Concatenate)    (None, 4, 4, 32)          0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 4, 4, 32)          0
     _________________________________________________________________
@@ -303,7 +319,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     dropout (Dropout)            (None, 8, 8, 16)          0
     _________________________________________________________________
-    merge (Merge)                (None, 8, 8, 32)          0
+    concatenate (Concatenate)    (None, 8, 8, 32)          0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 8, 8, 32)          0
     _________________________________________________________________
@@ -311,7 +327,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 16, 16, 16)        64
     _________________________________________________________________
-    merge (Merge)                (None, 16, 16, 32)        0
+    concatenate (Concatenate)    (None, 16, 16, 32)        0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 16, 16, 32)        0
     _________________________________________________________________
@@ -319,7 +335,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 32, 32, 16)        128
     _________________________________________________________________
-    merge (Merge)                (None, 32, 32, 32)        0
+    concatenate (Concatenate)    (None, 32, 32, 32)        0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 32, 32, 32)        0
     _________________________________________________________________
@@ -327,7 +343,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 64, 64, 8)         256
     _________________________________________________________________
-    merge (Merge)                (None, 64, 64, 16)        0
+    concatenate (Concatenate)    (None, 64, 64, 16)        0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 64, 64, 16)        0
     _________________________________________________________________
@@ -335,7 +351,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 128, 128, 4)       512
     _________________________________________________________________
-    merge (Merge)                (None, 128, 128, 8)       0
+    concatenate (Concatenate)    (None, 128, 128, 8)       0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 128, 128, 8)       0
     _________________________________________________________________
@@ -343,7 +359,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     _________________________________________________________________
     batch_normalization (BatchNo (None, 256, 256, 2)       1024
     _________________________________________________________________
-    merge (Merge)                (None, 256, 256, 4)       0
+    concatenate (Concatenate)    (None, 256, 256, 4)       0
     _________________________________________________________________
     leaky_re_lu (LeakyReLU)      (None, 256, 256, 4)       0
     _________________________________________________________________
@@ -434,7 +450,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     dconv1 = BatchNorm()(dconv1)
     dconv1 = Dropout(0.5)(dconv1)
     try:
-        x = merge([dconv1, conv8], **merge_params)
+        x = concatenate_layers([dconv1, conv8], **merge_params)
     except ValueError:
         return Model(i, dconv1, name=name)
     x = LeakyReLU(0.2)(x)
@@ -444,7 +460,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
                            get_deconv_shape(batch_size, nf * 8, 4, 4))(x)
     dconv2 = BatchNorm()(dconv2)
     dconv2 = Dropout(0.5)(dconv2)
-    x = merge([dconv2, conv7], **merge_params)
+    x = concatenate_layers([dconv2, conv7], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(8 + 8) x 4 x 4
 
@@ -452,42 +468,42 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
                            get_deconv_shape(batch_size, nf * 8, 8, 8))(x)
     dconv3 = BatchNorm()(dconv3)
     dconv3 = Dropout(0.5)(dconv3)
-    x = merge([dconv3, conv6], **merge_params)
+    x = concatenate_layers([dconv3, conv6], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(8 + 8) x 8 x 8
 
     dconv4 = Deconvolution(nf * 8,
                            get_deconv_shape(batch_size, nf * 8, 16, 16))(x)
     dconv4 = BatchNorm()(dconv4)
-    x = merge([dconv4, conv5], **merge_params)
+    x = concatenate_layers([dconv4, conv5], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(8 + 8) x 16 x 16
 
     dconv5 = Deconvolution(nf * 8,
                            get_deconv_shape(batch_size, nf * 8, 32, 32))(x)
     dconv5 = BatchNorm()(dconv5)
-    x = merge([dconv5, conv4], **merge_params)
+    x = concatenate_layers([dconv5, conv4], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(8 + 8) x 32 x 32
 
     dconv6 = Deconvolution(nf * 4,
                            get_deconv_shape(batch_size, nf * 4, 64, 64))(x)
     dconv6 = BatchNorm()(dconv6)
-    x = merge([dconv6, conv3], **merge_params)
+    x = concatenate_layers([dconv6, conv3], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(4 + 4) x 64 x 64
 
     dconv7 = Deconvolution(nf * 2,
                            get_deconv_shape(batch_size, nf * 2, 128, 128))(x)
     dconv7 = BatchNorm()(dconv7)
-    x = merge([dconv7, conv2], **merge_params)
+    x = concatenate_layers([dconv7, conv2], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(2 + 2) x 128 x 128
 
     dconv8 = Deconvolution(nf,
                            get_deconv_shape(batch_size, nf, 256, 256))(x)
     dconv8 = BatchNorm()(dconv8)
-    x = merge([dconv8, conv1], **merge_params)
+    x = concatenate_layers([dconv8, conv1], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(1 + 1) x 256 x 256
 
@@ -607,7 +623,7 @@ def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
     _________________________________________________________________
      (Model)                     (None, 4, 512, 512)       23454
     _________________________________________________________________
-    merge (Merge)                (None, 7, 512, 512)       0
+    concatenate (Concatenate)    (None, 7, 512, 512)       0
     _________________________________________________________________
      (Model)                     (None, 1, 16, 16)         1813
     =================================================================
@@ -623,7 +639,7 @@ def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
     bp = atob(a)
 
     # Discriminator receives the pair of images
-    d_in = merge([a, bp], mode='concat', concat_axis=1)
+    d_in = concatenate_layers([a, bp], mode='concat', concat_axis=1)
 
     pix2pix = Model([a, b], d(d_in), name=name)
 
