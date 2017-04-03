@@ -1,557 +1,494 @@
-from __future__ import print_function, division, absolute_import
+__doc__ = """The model definitions for the pix2pix network taken from the
+retina repository at https://github.com/costapt/vess2ret
+"""
 import os
+
 try:
-    assert os.environ['KERAS_BACKEND'] == 'tensorflow', "Tensorflow backend is expected!"
+    assert os.environ[
+               'KERAS_BACKEND'] == 'theano', "Theano backend is expected!"
 except KeyError:
-    print("Backend for keras is undefined setting to tensorflow for Pix2Pix")
-    os.environ['KERAS_BACKEND'] = 'tensorflow'
+    print("Backend for keras is undefined setting to theano for Pix2Pix")
+    os.environ['KERAS_BACKEND'] = 'theano'
+
+import keras
+from keras import objectives
+from keras import backend as K
 from keras.models import Model
-from keras.layers.core import Flatten, Dense, Dropout, Activation, Lambda, Reshape
-from keras.layers.convolutional import Convolution2D, Deconvolution2D, ZeroPadding2D, UpSampling2D
+from keras.optimizers import Adam
 from keras.layers import Input, merge
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.normalization import BatchNormalization
-from keras.layers.pooling import MaxPooling2D
-from keras.optimizers import Adam, SGD
-from keras.utils import generic_utils
-import keras.backend as K
-import numpy as np
-# noinspection PyPep8
-from pyqae.utils import Tuple, List, Optional
+from keras.layers.convolutional import Convolution2D, Deconvolution2D
+from keras.layers.core import Activation, Dropout
 
-VERBOSE = False
-SAVE_FIGURES = False
-
-__doc__ = """
-Pix2Pix is a generative model to go from images to other images.
-The code is modified from https://github.com/tdeboissiere/DeepLearningImplementations/tree/master/pix2pix/src/model
-And changed so it supports
-"""
-
-def minb_disc(x):
-    diffs = K.expand_dims(x, 3) - K.expand_dims(K.permute_dimensions(x, [1, 2, 0]), 0)
-    abs_diffs = K.sum(K.abs(diffs), 2)
-    x = K.sum(K.exp(-abs_diffs), 2)
-
-    return x
+KERAS_2 = keras.__version__[0] == '2'
+K.set_image_dim_ordering('th')
 
 
-def lambda_output(input_shape):
-    return input_shape[:2]
-
-def _get_conv_size(x):
-    if VERBOSE: print('current shape:', x._keras_shape)
-    if K.image_dim_ordering() == "tf":
-        _, x_wid, y_wid, _ = x._keras_shape
+def Convolution(f, k=3, s=2, border_mode='same', **kwargs):
+    """Convenience method for Convolutions."""
+    if KERAS_2:
+        return Convolution2D(f, kernel_size=(k, k),
+                             padding=border_mode,
+                             subsample=(s, s),
+                             **kwargs)
     else:
-        _, _, x_wid, y_wid = x._keras_shape
-    xw_wid = min(x_wid, 3)
-    yw_wid = min(y_wid, 3)
-    if VERBOSE: print('conv2d size', xw_wid, yw_wid)
-    return xw_wid, yw_wid
+        return Convolution2D(f, k, k, border_mode=border_mode,
+                             subsample=(s, s),
+                             **kwargs)
 
-def conv_block_unet(x, f, name, bn_mode, bn_axis, bn=True, subsample=(2,2)):
 
+def Deconvolution(f, output_shape, k=2, s=2, **kwargs):
+    """Convenience method for Transposed Convolutions."""
+    if KERAS_2:
+        return Deconvolution2D(f, (k, k), output_shape=output_shape,
+                               subsample=(s, s), **kwargs)
+    else:
+        return Deconvolution2D(f, k, k, output_shape=output_shape,
+                               subsample=(s, s), **kwargs)
+
+
+def BatchNorm(mode=2, axis=1, **kwargs):
+    """Convenience method for BatchNormalization layers."""
+    return BatchNormalization(axis=axis, **kwargs)
+
+
+def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
+    # type: (int, int, int, int, bool, str) -> keras.models.Model
+    """Define a U-Net.
+
+    Input has shape in_ch x 512 x 512
+    Parameters:
+    - in_ch: the number of input channels;
+    - out_ch: the number of output channels;
+    - nf: the number of filters of the first layer;
+    - is_binary: if is_binary is true, the last layer is followed by a sigmoid
+    activation function, otherwise, a tanh is used.
+    >>> K.set_image_dim_ordering('th')
+    >>> unet = g_unet(3, 4, 5, batch_size=7, is_binary=True)
+    TheanoShapedU-NET
+    >>> unet.summary()  #doctest: +NORMALIZE_WHITESPACE
+    >>> K.set_image_dim_ordering('tf')
+    >>> unet2=g_unet(3, 4, 2, batch_size=6, is_binary=False)
+    TensorflowShapedU-NET
+    >>> unet2.summary()  #doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input_2 (InputLayer)         (None, 512, 512, 3)       0
+    _________________________________________________________________
+    conv2d_10 (Conv2D)           (None, 256, 256, 2)       56
+    _________________________________________________________________
+    batch_normalization_11 (Batc (None, 256, 256, 2)       1024
+    _________________________________________________________________
+    leaky_re_lu_10 (LeakyReLU)   (None, 256, 256, 2)       0
+    _________________________________________________________________
+    conv2d_11 (Conv2D)           (None, 128, 128, 4)       76
+    _________________________________________________________________
+    batch_normalization_12 (Batc (None, 128, 128, 4)       512
+    _________________________________________________________________
+    leaky_re_lu_11 (LeakyReLU)   (None, 128, 128, 4)       0
+    _________________________________________________________________
+    conv2d_12 (Conv2D)           (None, 64, 64, 8)         296
+    _________________________________________________________________
+    batch_normalization_13 (Batc (None, 64, 64, 8)         256
+    _________________________________________________________________
+    leaky_re_lu_12 (LeakyReLU)   (None, 64, 64, 8)         0
+    _________________________________________________________________
+    conv2d_13 (Conv2D)           (None, 32, 32, 16)        1168
+    _________________________________________________________________
+    batch_normalization_14 (Batc (None, 32, 32, 16)        128
+    _________________________________________________________________
+    leaky_re_lu_13 (LeakyReLU)   (None, 32, 32, 16)        0
+    _________________________________________________________________
+    conv2d_14 (Conv2D)           (None, 16, 16, 16)        2320
+    _________________________________________________________________
+    batch_normalization_15 (Batc (None, 16, 16, 16)        64
+    _________________________________________________________________
+    leaky_re_lu_14 (LeakyReLU)   (None, 16, 16, 16)        0
+    _________________________________________________________________
+    conv2d_15 (Conv2D)           (None, 8, 8, 16)          2320
+    _________________________________________________________________
+    batch_normalization_16 (Batc (None, 8, 8, 16)          32
+    _________________________________________________________________
+    leaky_re_lu_15 (LeakyReLU)   (None, 8, 8, 16)          0
+    _________________________________________________________________
+    conv2d_16 (Conv2D)           (None, 4, 4, 16)          2320
+    _________________________________________________________________
+    batch_normalization_17 (Batc (None, 4, 4, 16)          16
+    _________________________________________________________________
+    leaky_re_lu_16 (LeakyReLU)   (None, 4, 4, 16)          0
+    _________________________________________________________________
+    conv2d_17 (Conv2D)           (None, 2, 2, 16)          2320
+    _________________________________________________________________
+    batch_normalization_18 (Batc (None, 2, 2, 16)          8
+    _________________________________________________________________
+    leaky_re_lu_17 (LeakyReLU)   (None, 2, 2, 16)          0
+    _________________________________________________________________
+    conv2d_18 (Conv2D)           (None, 1, 1, 16)          1040
+    _________________________________________________________________
+    batch_normalization_19 (Batc (None, 1, 1, 16)          4
+    _________________________________________________________________
+    leaky_re_lu_18 (LeakyReLU)   (None, 1, 1, 16)          0
+    _________________________________________________________________
+    conv2d_transpose_2 (Conv2DTr (None, 2, 2, 16)          1040
+    _________________________________________________________________
+    batch_normalization_20 (Batc (None, 2, 2, 16)          8
+    _________________________________________________________________
+    dropout_2 (Dropout)          (None, 2, 2, 16)          0
+    _________________________________________________________________
+    merge_2 (Merge)              (None, 2, 2, 32)          0
+    _________________________________________________________________
+    leaky_re_lu_19 (LeakyReLU)   (None, 2, 2, 32)          0
+    _________________________________________________________________
+    conv2d_transpose_3 (Conv2DTr (None, 4, 4, 16)          2064
+    _________________________________________________________________
+    batch_normalization_21 (Batc (None, 4, 4, 16)          16
+    _________________________________________________________________
+    dropout_3 (Dropout)          (None, 4, 4, 16)          0
+    _________________________________________________________________
+    merge_3 (Merge)              (None, 4, 4, 32)          0
+    _________________________________________________________________
+    leaky_re_lu_20 (LeakyReLU)   (None, 4, 4, 32)          0
+    _________________________________________________________________
+    conv2d_transpose_4 (Conv2DTr (None, 8, 8, 16)          2064
+    _________________________________________________________________
+    batch_normalization_22 (Batc (None, 8, 8, 16)          32
+    _________________________________________________________________
+    dropout_4 (Dropout)          (None, 8, 8, 16)          0
+    _________________________________________________________________
+    merge_4 (Merge)              (None, 8, 8, 32)          0
+    _________________________________________________________________
+    leaky_re_lu_21 (LeakyReLU)   (None, 8, 8, 32)          0
+    _________________________________________________________________
+    conv2d_transpose_5 (Conv2DTr (None, 16, 16, 16)        2064
+    _________________________________________________________________
+    batch_normalization_23 (Batc (None, 16, 16, 16)        64
+    _________________________________________________________________
+    merge_5 (Merge)              (None, 16, 16, 32)        0
+    _________________________________________________________________
+    leaky_re_lu_22 (LeakyReLU)   (None, 16, 16, 32)        0
+    _________________________________________________________________
+    conv2d_transpose_6 (Conv2DTr (None, 32, 32, 16)        2064
+    _________________________________________________________________
+    batch_normalization_24 (Batc (None, 32, 32, 16)        128
+    _________________________________________________________________
+    merge_6 (Merge)              (None, 32, 32, 32)        0
+    _________________________________________________________________
+    leaky_re_lu_23 (LeakyReLU)   (None, 32, 32, 32)        0
+    _________________________________________________________________
+    conv2d_transpose_7 (Conv2DTr (None, 64, 64, 8)         1032
+    _________________________________________________________________
+    batch_normalization_25 (Batc (None, 64, 64, 8)         256
+    _________________________________________________________________
+    merge_7 (Merge)              (None, 64, 64, 16)        0
+    _________________________________________________________________
+    leaky_re_lu_24 (LeakyReLU)   (None, 64, 64, 16)        0
+    _________________________________________________________________
+    conv2d_transpose_8 (Conv2DTr (None, 128, 128, 4)       260
+    _________________________________________________________________
+    batch_normalization_26 (Batc (None, 128, 128, 4)       512
+    _________________________________________________________________
+    merge_8 (Merge)              (None, 128, 128, 8)       0
+    _________________________________________________________________
+    leaky_re_lu_25 (LeakyReLU)   (None, 128, 128, 8)       0
+    _________________________________________________________________
+    conv2d_transpose_9 (Conv2DTr (None, 256, 256, 2)       66
+    _________________________________________________________________
+    batch_normalization_27 (Batc (None, 256, 256, 2)       1024
+    _________________________________________________________________
+    merge_9 (Merge)              (None, 256, 256, 4)       0
+    _________________________________________________________________
+    leaky_re_lu_26 (LeakyReLU)   (None, 256, 256, 4)       0
+    _________________________________________________________________
+    conv2d_transpose_10 (Conv2DT (None, 512, 512, 4)       68
+    _________________________________________________________________
+    activation_1 (Activation)    (None, 512, 512, 4)       0
+    =================================================================
+    Total params: 26,722.0
+    Trainable params: 24,680.0
+    Non-trainable params: 2,042.0
+    _________________________________________________________________
+    """
+    merge_params = {
+        'mode': 'concat',
+        'concat_axis': 1
+    }
+    if True:
+        if K.image_dim_ordering() == 'th':
+            print('TheanoShapedU-NET')
+
+            i = Input(shape=(in_ch, 512, 512))
+
+            def get_deconv_shape(samples, channels, x_dim, y_dim):
+                return samples, channels, x_dim, y_dim
+        elif K.image_dim_ordering() == 'tf':
+            i = Input(shape=(512, 512, in_ch))
+            print('TensorflowShapedU-NET')
+
+            def get_deconv_shape(samples, channels, x_dim, y_dim):
+                return samples, x_dim, y_dim, channels
+
+            merge_params['concat_axis'] = 3
+        else:
+            raise ValueError(
+                'Keras dimension ordering not supported: {}'.format(
+                    K.image_dim_ordering()))
+    else:
+        i = Input(shape=(in_ch, 512, 512))
+    # in_ch x 512 x 512
+    conv1 = Convolution(nf)(i)
+    conv1 = BatchNorm()(conv1)
+    x = LeakyReLU(0.2)(conv1)
+    # nf x 256 x 256
+
+    conv2 = Convolution(nf * 2)(x)
+    conv2 = BatchNorm()(conv2)
+    x = LeakyReLU(0.2)(conv2)
+    # nf*2 x 128 x 128
+
+    conv3 = Convolution(nf * 4)(x)
+    conv3 = BatchNorm()(conv3)
+    x = LeakyReLU(0.2)(conv3)
+    # nf*4 x 64 x 64
+
+    conv4 = Convolution(nf * 8)(x)
+    conv4 = BatchNorm()(conv4)
+    x = LeakyReLU(0.2)(conv4)
+    # nf*8 x 32 x 32
+
+    conv5 = Convolution(nf * 8)(x)
+    conv5 = BatchNorm()(conv5)
+    x = LeakyReLU(0.2)(conv5)
+    # nf*8 x 16 x 16
+
+    conv6 = Convolution(nf * 8)(x)
+    conv6 = BatchNorm()(conv6)
+    x = LeakyReLU(0.2)(conv6)
+    # nf*8 x 8 x 8
+
+    conv7 = Convolution(nf * 8)(x)
+    conv7 = BatchNorm()(conv7)
+    x = LeakyReLU(0.2)(conv7)
+    # nf*8 x 4 x 4
+
+    conv8 = Convolution(nf * 8)(x)
+    conv8 = BatchNorm()(conv8)
+    x = LeakyReLU(0.2)(conv8)
+    # nf*8 x 2 x 2
+
+    conv9 = Convolution(nf * 8, k=2, s=1, border_mode='valid')(x)
+    conv9 = BatchNorm()(conv9)
+    x = LeakyReLU(0.2)(conv9)
+    # nf*8 x 1 x 1
+
+    dconv1 = Deconvolution(nf * 8,
+                           get_deconv_shape(batch_size, nf * 8, 2, 2),
+                           k=2, s=1)(x)
+    dconv1 = BatchNorm()(dconv1)
+    dconv1 = Dropout(0.5)(dconv1)
+    try:
+        x = merge([dconv1, conv8], **merge_params)
+    except ValueError:
+        return Model(i, dconv1, name=name)
     x = LeakyReLU(0.2)(x)
-    xw_wid, yw_wid = _get_conv_size(x)
-    x = Convolution2D(f, xw_wid, yw_wid, subsample=subsample, name=name, border_mode="same")(x)
-    if bn:
-        x = BatchNormalization(mode=bn_mode, axis=bn_axis)(x)
+    # nf*(8 + 8) x 2 x 2
 
-    return x
-
-
-def up_conv_block_unet(x, x2, f, name, bn_mode, bn_axis, bn=True, dropout=False):
-
-    x = Activation("relu")(x)
-    x = UpSampling2D(size=(2, 2))(x)
-    xw_wid, yw_wid = _get_conv_size(x)
-    x = Convolution2D(f, xw_wid, yw_wid, name=name, border_mode="same")(x)
-    if bn:
-        x = BatchNormalization(mode=bn_mode, axis=bn_axis)(x)
-    if dropout:
-        x = Dropout(0.5)(x)
-    x = merge([x, x2], mode='concat', concat_axis=bn_axis)
-
-    return x
-
-
-def deconv_block_unet(x, x2, f, h, w, batch_size, bn_mode, bn_axis, bn=True, dropout=False):
-
-    o_shape = (batch_size, h * 2, w * 2, f)
-    x = Activation("relu")(x)
-    xw_wid, yw_wid = _get_conv_size(x)
-    x = Deconvolution2D(f, xw_wid, yw_wid, output_shape=o_shape, subsample=(2, 2), border_mode="same")(x)
-    if bn:
-        x = BatchNormalization(mode=bn_mode, axis=bn_axis)(x)
-    if dropout:
-        x = Dropout(0.5)(x)
-    x = merge([x, x2], mode='concat', concat_axis=bn_axis)
-
-    return x
-
-
-def generator_unet_upsampling(img_dim, bn_mode, model_name="generator_unet_upsampling"):
-
-    nb_filters = 64
-
-    if K.image_dim_ordering() == "th":
-        bn_axis = 1
-        nb_channels = img_dim[0]
-        min_s = min(img_dim[1:])
-    else:
-        bn_axis = -1
-        nb_channels = img_dim[-1]
-        min_s = min(img_dim[:-1])
-
-    unet_input = Input(shape=img_dim, name="unet_input")
-
-    # Prepare encoder filters
-    nb_conv = int(np.floor(np.log(min_s) / np.log(2)))
-    if VERBOSE: print(nb_conv, "number of convolutions")
-    list_nb_filters = [nb_filters * min(8, (2 ** i)) for i in range(nb_conv)]
-
-    # Encoder
-    xw_wid, yw_wid = _get_conv_size(unet_input)
-    list_encoder = [Convolution2D(list_nb_filters[0], xw_wid, yw_wid,
-                                  subsample=(2, 2), name="unet_conv2D_1", border_mode="same")(unet_input)]
-    for i, f in enumerate(list_nb_filters[1:]):
-        name = "unet_conv2D_%s" % (i + 2)
-        conv = conv_block_unet(list_encoder[-1], f, name, bn_mode, bn_axis)
-        list_encoder.append(conv)
-
-    # Prepare decoder filters
-    list_nb_filters = list_nb_filters[:-2][::-1]
-    if len(list_nb_filters) < nb_conv - 1:
-        list_nb_filters.append(nb_filters)
-
-    # Decoder
-    list_decoder = [up_conv_block_unet(list_encoder[-1], list_encoder[-2],
-                                       list_nb_filters[0], "unet_upconv2D_1", bn_mode, bn_axis, dropout=True)]
-    for i, f in enumerate(list_nb_filters[1:]):
-        name = "unet_upconv2D_%s" % (i + 2)
-        # Dropout only on first few layers
-        if i < 2:
-            d = True
-        else:
-            d = False
-        conv = up_conv_block_unet(list_decoder[-1], list_encoder[-(i + 3)], f, name, bn_mode, bn_axis, dropout=d)
-        list_decoder.append(conv)
-
-    x = Activation("relu")(list_decoder[-1])
-    x = UpSampling2D(size=(2, 2))(x)
-    xw_wid, yw_wid = _get_conv_size(x)
-    x = Convolution2D(nb_channels, xw_wid, xw_wid, name="last_conv", border_mode="same")(x)
-    x = Activation("tanh")(x)
-
-    generator_unet = Model(input=[unet_input], output=[x])
-
-    return generator_unet
-
-
-def generator_unet_deconv(img_dim, bn_mode, batch_size, model_name="generator_unet_deconv"):
-
-    assert K.backend() == "tensorflow", "Not implemented with theano backend"
-
-    nb_filters = 64
-
-    h, w, nb_channels = img_dim
-    min_s = min(h, w)
-    if K.image_dim_ordering() == "th":
-        bn_axis = 1
-    else:
-        bn_axis = -1
-
-    unet_input = Input(shape=img_dim, name="unet_input")
-
-    # Prepare encoder filters
-    nb_conv = int(np.floor(np.log(min_s) / np.log(2)))
-    if VERBOSE: print(nb_conv, "number of convolutions")
-    list_nb_filters = [nb_filters * min(8, (2 ** i)) for i in range(nb_conv)]
-
-    # Encoder
-    xw_wid, yw_wid = _get_conv_size(unet_input)
-    list_encoder = [Convolution2D(list_nb_filters[0], xw_wid, yw_wid,
-                                  subsample=(2, 2), name="unet_conv2D_1", border_mode="same")(unet_input)]
-    # update current "image" h and w
-    h, w = h / 2, w / 2
-    for i, f in enumerate(list_nb_filters[1:]):
-        name = "unet_conv2D_%s" % (i + 2)
-        conv = conv_block_unet(list_encoder[-1], f, name, bn_mode, bn_axis)
-        list_encoder.append(conv)
-        h, w = h / 2, w / 2
-
-    # Prepare decoder filters
-    list_nb_filters = list_nb_filters[:-1][::-1]
-    if len(list_nb_filters) < nb_conv - 1:
-        list_nb_filters.append(nb_filters)
-
-    # Decoder
-    list_decoder = [deconv_block_unet(list_encoder[-1], list_encoder[-2],
-                                      list_nb_filters[0], h, w, batch_size,
-                                      "unet_upconv2D_1", bn_mode, bn_axis, dropout=True)]
-    h, w = h * 2, w * 2
-    for i, f in enumerate(list_nb_filters[1:]):
-        name = "unet_upconv2D_%s" % (i + 2)
-        # Dropout only on first few layers
-        if i < 2:
-            d = True
-        else:
-            d = False
-        conv = deconv_block_unet(list_decoder[-1], list_encoder[-(i + 3)], f, h,
-                                 w, batch_size, name, bn_mode, bn_axis, dropout=d)
-        list_decoder.append(conv)
-        h, w = h * 2, w * 2
-
-    x = Activation("relu")(list_decoder[-1])
-    o_shape = (batch_size,) + img_dim
-    xw_wid, yw_wid = _get_conv_size(x)
-    x = Deconvolution2D(nb_channels, xw_wid, yw_wid, output_shape=o_shape, subsample=(2, 2), border_mode="same")(x)
-    x = Activation("tanh")(x)
-
-    generator_unet = Model(input=[unet_input], output=[x])
-
-    return generator_unet
-
-
-def DCGAN_discriminator(img_dim, nb_patch, bn_mode, model_name="DCGAN_discriminator", use_mbd=True):
-    """
-    Discriminator model of the DCGAN
-
-    args : img_dim (tuple of int) num_chan, height, width
-           pretr_weights_file (str) file holding pre trained weights
-
-    returns : model (keras NN) the Neural Net model
-    """
-
-    list_input = [Input(shape=img_dim, name="disc_input_%s" % i) for i in range(nb_patch)]
-
-    if K.image_dim_ordering() == "th":
-        bn_axis = 1
-    else:
-        bn_axis = -1
-
-    # First conv
-    x_input = Input(shape=img_dim, name="discriminator_input")
-    xw_wid, yw_wid = _get_conv_size(x_input)
-    x = Convolution2D(64, xw_wid, yw_wid, subsample=(2, 2), name="disc_conv2d_1", border_mode="same")(x_input)
-    x = BatchNormalization(mode=bn_mode, axis=bn_axis)(x)
+    dconv2 = Deconvolution(nf * 8,
+                           get_deconv_shape(batch_size, nf * 8, 4, 4))(x)
+    dconv2 = BatchNorm()(dconv2)
+    dconv2 = Dropout(0.5)(dconv2)
+    x = merge([dconv2, conv7], **merge_params)
     x = LeakyReLU(0.2)(x)
+    # nf*(8 + 8) x 4 x 4
 
-    # Next convs
-    list_f = [128, 256, 512, 512]
-    for i, f in enumerate(list_f):
-        name = "disc_conv2d_%s" % (i + 2)
-        xw_wid, yw_wid = _get_conv_size(x)
-        x = Convolution2D(f, xw_wid, yw_wid, subsample=(2, 2), name=name, border_mode="same")(x)
-        x = BatchNormalization(mode=bn_mode, axis=bn_axis)(x)
-        x = LeakyReLU(0.2)(x)
+    dconv3 = Deconvolution(nf * 8,
+                           get_deconv_shape(batch_size, nf * 8, 8, 8))(x)
+    dconv3 = BatchNorm()(dconv3)
+    dconv3 = Dropout(0.5)(dconv3)
+    x = merge([dconv3, conv6], **merge_params)
+    x = LeakyReLU(0.2)(x)
+    # nf*(8 + 8) x 8 x 8
 
-    x_flat = Flatten()(x)
-    x = Dense(2, activation='softmax', name="disc_dense")(x_flat)
+    dconv4 = Deconvolution(nf * 8,
+                           get_deconv_shape(batch_size, nf * 8, 16, 16))(x)
+    dconv4 = BatchNorm()(dconv4)
+    x = merge([dconv4, conv5], **merge_params)
+    x = LeakyReLU(0.2)(x)
+    # nf*(8 + 8) x 16 x 16
 
-    PatchGAN = Model(input=[x_input], output=[x, x_flat], name="PatchGAN")
-    print("PatchGAN summary")
-    PatchGAN.summary()
+    dconv5 = Deconvolution(nf * 8,
+                           get_deconv_shape(batch_size, nf * 8, 32, 32))(x)
+    dconv5 = BatchNorm()(dconv5)
+    x = merge([dconv5, conv4], **merge_params)
+    x = LeakyReLU(0.2)(x)
+    # nf*(8 + 8) x 32 x 32
 
-    x = [PatchGAN(patch)[0] for patch in list_input]
-    x_mbd = [PatchGAN(patch)[1] for patch in list_input]
+    dconv6 = Deconvolution(nf * 4,
+                           get_deconv_shape(batch_size, nf * 4, 64, 64))(x)
+    dconv6 = BatchNorm()(dconv6)
+    x = merge([dconv6, conv3], **merge_params)
+    x = LeakyReLU(0.2)(x)
+    # nf*(4 + 4) x 64 x 64
 
-    if len(x) > 1:
-        x = merge(x, mode="concat", name="merge_feat")
-    else:
-        x = x[0]
+    dconv7 = Deconvolution(nf * 2,
+                           get_deconv_shape(batch_size, nf * 2, 128, 128))(x)
+    dconv7 = BatchNorm()(dconv7)
+    x = merge([dconv7, conv2], **merge_params)
+    x = LeakyReLU(0.2)(x)
+    # nf*(2 + 2) x 128 x 128
 
-    if use_mbd:
-        if len(x_mbd) > 1:
-            x_mbd = merge(x_mbd, mode="concat", name="merge_feat_mbd")
-        else:
-            x_mbd = x_mbd[0]
+    dconv8 = Deconvolution(nf,
+                           get_deconv_shape(batch_size, nf, 256, 256))(x)
+    dconv8 = BatchNorm()(dconv8)
+    x = merge([dconv8, conv1], **merge_params)
+    x = LeakyReLU(0.2)(x)
+    # nf*(1 + 1) x 256 x 256
 
-        num_kernels = 100
-        dim_per_kernel = 5
+    dconv9 = Deconvolution(out_ch,
+                           get_deconv_shape(batch_size, out_ch, 512, 512))(x)
+    # out_ch x 512 x 512
 
-        M = Dense(num_kernels * dim_per_kernel, bias=False, activation=None)
-        MBD = Lambda(minb_disc, output_shape=lambda_output)
+    act = 'sigmoid' if is_binary else 'tanh'
+    out = Activation(act)(dconv9)
 
-        x_mbd = M(x_mbd)
-        x_mbd = Reshape((num_kernels, dim_per_kernel))(x_mbd)
-        x_mbd = MBD(x_mbd)
-        x = merge([x, x_mbd], mode='concat')
+    unet = Model(i, out, name=name)
 
-    x_out = Dense(2, activation="softmax", name="disc_output")(x)
-
-    discriminator_model = Model(input=list_input, output=[x_out], name=model_name)
-
-    return discriminator_model
-
-
-def DCGAN(generator, discriminator_model, img_dim, patch_size, image_dim_ordering):
-
-    gen_input = Input(shape=img_dim, name="DCGAN_input")
-
-    generated_image = generator(gen_input)
-
-    if image_dim_ordering == "th":
-        h, w = img_dim[1:]
-    else:
-        h, w = img_dim[:-1]
-    ph, pw = patch_size
-
-    list_row_idx = [(i * ph, (i + 1) * ph) for i in range(h // ph)]
-    list_col_idx = [(i * pw, (i + 1) * pw) for i in range(w // pw)]
-
-    list_gen_patch = []
-    for row_idx in list_row_idx:
-        for col_idx in list_col_idx:
-            if image_dim_ordering == "tf":
-                x_patch = Lambda(lambda z: z[:, row_idx[0]:row_idx[1], col_idx[0]:col_idx[1], :])(generated_image)
-            else:
-                x_patch = Lambda(lambda z: z[:, :, row_idx[0]:row_idx[1], col_idx[0]:col_idx[1]])(generated_image)
-            list_gen_patch.append(x_patch)
-
-    DCGAN_output = discriminator_model(list_gen_patch)
-
-    DCGAN_model = Model(input=[gen_input],
-                  output=[generated_image, DCGAN_output],
-                  name="DCGAN")
-
-    return DCGAN_model
+    return unet
 
 
-def load(model_name, img_dim, nb_patch, bn_mode, use_mbd, batch_size, out_path_fmt = '../../figures/%s.png'):
+def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d'):
+    """Define the discriminator network.
+
+    Parameters:
+    - a_ch: the number of channels of the first image;
+    - b_ch: the number of channels of the second image;
+    - nf: the number of filters of the first layer.
+    >>> K.set_image_dim_ordering('th')
+    >>> disc=discriminator(3,4,2)
+    >>> disc.summary() #doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input_1 (InputLayer)         (None, 7, 512, 512)       0
+    _________________________________________________________________
+    conv2d_1 (Conv2D)            (None, 2, 256, 256)       128
+    _________________________________________________________________
+    leaky_re_lu_1 (LeakyReLU)    (None, 2, 256, 256)       0
+    _________________________________________________________________
+    conv2d_2 (Conv2D)            (None, 4, 128, 128)       76
+    _________________________________________________________________
+    leaky_re_lu_2 (LeakyReLU)    (None, 4, 128, 128)       0
+    _________________________________________________________________
+    conv2d_3 (Conv2D)            (None, 8, 64, 64)         296
+    _________________________________________________________________
+    leaky_re_lu_3 (LeakyReLU)    (None, 8, 64, 64)         0
+    _________________________________________________________________
+    conv2d_4 (Conv2D)            (None, 16, 32, 32)        1168
+    _________________________________________________________________
+    leaky_re_lu_4 (LeakyReLU)    (None, 16, 32, 32)        0
+    _________________________________________________________________
+    conv2d_5 (Conv2D)            (None, 1, 16, 16)         145
+    _________________________________________________________________
+    activation_1 (Activation)    (None, 1, 16, 16)         0
+    =================================================================
+    Total params: 1,813.0
+    Trainable params: 1,813.0
+    Non-trainable params: 0.0
+    _________________________________________________________________
     """
+    i = Input(shape=(a_ch + b_ch, 512, 512))
 
-    :param model_name:
-    :param img_dim:
-    :param nb_patch:
-    :param bn_mode:
-    :param use_mbd:
-    :param batch_size:
-    :param out_path_fmt:
+    # (a_ch + b_ch) x 512 x 512
+    conv1 = Convolution(nf)(i)
+    x = LeakyReLU(0.2)(conv1)
+    # nf x 256 x 256
+
+    conv2 = Convolution(nf * 2)(x)
+    x = LeakyReLU(0.2)(conv2)
+    # nf*2 x 128 x 128
+
+    conv3 = Convolution(nf * 4)(x)
+    x = LeakyReLU(0.2)(conv3)
+    # nf*4 x 64 x 64
+
+    conv4 = Convolution(nf * 8)(x)
+    x = LeakyReLU(0.2)(conv4)
+    # nf*8 x 32 x 32
+
+    conv5 = Convolution(1)(x)
+    out = Activation('sigmoid')(conv5)
+    # 1 x 16 x 16
+
+    d = Model(i, out, name=name)
+
+    def d_loss(y_true, y_pred):
+        L = objectives.binary_crossentropy(K.batch_flatten(y_true),
+                                           K.batch_flatten(y_pred))
+        return L
+
+    d.compile(optimizer=opt, loss=d_loss)
+    return d
+
+
+def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
+            is_b_binary=False, opt=Adam(lr=2e-4, beta_1=0.5), name='pix2pix'):
+    # type: (...) -> keras.models.Model
+    """
+    Define the pix2pix network.
+    :param atob:
+    :param d:
+    :param a_ch:
+    :param b_ch:
+    :param alpha:
+    :param is_a_binary:
+    :param is_b_binary:
+    :param opt:
+    :param name:
     :return:
-    >>> SAVE_FIGURES = True
-    >>> VERBOSE = False
-    >>> n_model = load("generator_unet_upsampling", (32, 32, 3), 16, 2, False, 32, out_path_fmt='%s.png')
-    >>> len(n_model.layers)
-    41
-    >>> u_model = load("generator_unet_upsampling", (64, 64, 1), 8, 2, False, 32, out_path_fmt='%s_2.png')
-    >>> len(u_model.layers)
-    49
-    >>> u_model.layers[-1].output_shape[1:]
-    (64, 64, 1)
-    >>> dcg_model = load("DCGAN_discriminator",(64, 64, 1), 8, True, True, False)  # doctest: +ELLIPSIS
-    PatchGAN summary
-     ...
-    discriminator_input (InputLayer) (None, 64, 64, 1)     0
-     ...
-    Total params: 3916674
-     ...
-    >>> [(ilay.name, ilay.output_shape[1:]) for ilay in dcg_model.layers]
-    [('disc_input_0', (64, 64, 1)), ('disc_input_1', (64, 64, 1)), ('disc_input_2', (64, 64, 1)), ('disc_input_3', (64, 64, 1)), ('disc_input_4', (64, 64, 1)), ('disc_input_5', (64, 64, 1)), ('disc_input_6', (64, 64, 1)), ('disc_input_7', (64, 64, 1)), ('PatchGAN', [(None, 2048)]), ('merge_feat_mbd', (16384,)), ('dense_1', (500,)), ('reshape_1', (100, 5)), ('merge_feat', (16,)), ('lambda_2', (100,)), ('merge_15', (116,)), ('disc_output', (2,))]
-    >>> len(dcg_model.layers)
-    16
-    >>> dcg_model.layers[-1].output_shape[1:]
-    (2,)
-    >>> # u_model = load("generator_unet_deconv", (256, 256, 3), 16, 2, False, 32, out_path_fmt='%s.png')
-
-
+    >>> unet = g_unet(3, 4, 2, batch_size=8, is_binary=False)
+    >>> disc=discriminator(3,4,2)
+    >>> pp_net=pix2pix(unet, disc, 3, 4)
+    >>> pp_net.summary()  #doctest: +NORMALIZE_WHITESPACE
     """
-    from keras.utils.visualize_util import plot
-    if model_name == "generator_unet_upsampling":
-        model = generator_unet_upsampling(img_dim, bn_mode, model_name=model_name)
-    elif model_name == "generator_unet_deconv":
-        model = generator_unet_deconv(img_dim, bn_mode, batch_size, model_name=model_name)
-    elif model_name == "DCGAN_discriminator":
-        model = DCGAN_discriminator(img_dim, nb_patch, bn_mode, model_name=model_name, use_mbd=use_mbd)
-    else:
-        raise RuntimeError("The model name is not supported by Pix2Pix currently {}".format(model_name))
+    a = Input(shape=(a_ch, 512, 512))
+    b = Input(shape=(b_ch, 512, 512))
 
-    if VERBOSE: print(model.summary())
-    if SAVE_FIGURES: plot(model, to_file=out_path_fmt % model_name, show_shapes=True, show_layer_names=True)
-    return model
+    # A -> B'
+    bp = atob(a)
 
-def build_models(
-        img_dim, # type: Tuple[int, int, int]
-        img_dim_disc, # type: Tuple[int, int, int]
-        bn_mode, # type: bool
-        use_mbd,
-        batch_size, # type: int
-        patch_size, # type: Tuple[int, int]
-        generator = "upsampling",
-        image_dim_ordering = None # type: Optional[str]
-    ):
-    """
+    # Discriminator receives the pair of images
+    d_in = merge([a, bp], mode='concat', concat_axis=1)
 
-    :param img_dim:
-    :param img_dim_disc:
-    :param bn_mode:
-    :param use_mbd:
-    :param batch_size:
-    :param patch_size:
-    :param generator:
-    :param image_dim_ordering:
-    :return:
-    >>> SAVE_FIGURES = False
-    >>> a,b,c = build_models((64, 64, 1), (64, 64, 1), True, False, 8, (64, 64 ))
-    """
+    pix2pix = Model([a, b], d(d_in), name=name)
 
-    assert generator in ["upsampling"], "The only models supported right now are upsampling (deconv doesnt work yet)"
-    nb_patch = (img_dim[0]//patch_size[0]) * (img_dim[1]//patch_size[1])
+    def pix2pix_loss(y_true, y_pred):
+        y_true_flat = K.batch_flatten(y_true)
+        y_pred_flat = K.batch_flatten(y_pred)
 
-    if image_dim_ordering is None:
-        image_dim_ordering = K.image_dim_ordering()
+        # Adversarial Loss
+        L_adv = objectives.binary_crossentropy(y_true_flat, y_pred_flat)
 
-    # Create optimizers
-    opt_dcgan = Adam(lr=1E-4, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    # opt_discriminator = SGD(lr=1E-3, momentum=0.9, nesterov=True)
-    opt_discriminator = Adam(lr=1E-4, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
-    # Load generator model
-    generator_model = load("generator_unet_%s" % generator,
-                                  img_dim,
-                                  nb_patch,
-                                  bn_mode,
-                                  use_mbd,
-                                  batch_size)
-    # Load discriminator model
-    discriminator_model = load("DCGAN_discriminator",
-                                      img_dim_disc,
-                                      nb_patch,
-                                      bn_mode,
-                                      use_mbd,
-                                      batch_size)
-
-    generator_model.compile(loss='mae', optimizer=opt_discriminator)
-    discriminator_model.trainable = False
-
-    DCGAN_model = DCGAN(generator_model,
-                               discriminator_model,
-                               img_dim,
-                               patch_size,
-                               image_dim_ordering)
-
-    loss = ['mae', 'binary_crossentropy']
-    loss_weights = [1E2, 1]
-    DCGAN_model.compile(loss=loss, loss_weights=loss_weights, optimizer=opt_dcgan)
-
-    discriminator_model.trainable = True
-    discriminator_model.compile(loss='binary_crossentropy', optimizer=opt_discriminator)
-    return generator_model, DCGAN_model, discriminator_model
-
-
-def extract_patches(X, # type: np.ndarray
-                    image_dim_ordering, # type: str
-                    patch_size # type: Tuple[int, int]
-                    ):
-
-    # Now extract patches form X_disc
-    if image_dim_ordering == "th":
-        # noinspection PyTypeChecker
-        X = X.transpose(0,2,3,1)
-
-    list_X = []
-    list_row_idx = [(i * patch_size[0], (i + 1) * patch_size[0]) for i in range(X.shape[1] / patch_size[0])]
-    list_col_idx = [(i * patch_size[1], (i + 1) * patch_size[1]) for i in range(X.shape[2] / patch_size[1])]
-
-    for row_idx in list_row_idx:
-        for col_idx in list_col_idx:
-            list_X.append(X[:, row_idx[0]:row_idx[1], col_idx[0]:col_idx[1], :])
-
-    if image_dim_ordering == "th":
-        for i in range(len(list_X)):
-            list_X[i] = list_X[i].transpose(0,3,1,2)
-
-    return list_X
-
-def gen_batch(X1, X2, batch_size):
-
-    while True:
-        idx = np.random.choice(X1.shape[0], batch_size, replace=False)
-        yield X1[idx], X2[idx]
-
-def get_disc_batch(X_full_batch, X_sketch_batch, generator_model, batch_counter, patch_size,
-                   image_dim_ordering, label_smoothing=False, label_flipping=0, use_patches = False):
-
-    # Create X_disc: alternatively only generated or real images
-    if batch_counter % 2 == 0:
-        # Produce an output
-        X_disc = generator_model.predict(X_sketch_batch)
-        y_disc = np.zeros((X_disc.shape[0], 2), dtype=np.uint8)
-        y_disc[:, 0] = 1
-
-        if label_flipping > 0:
-            p = np.random.binomial(1, label_flipping)
-            if p > 0:
-                y_disc[:, [0, 1]] = y_disc[:, [1, 0]]
-
-    else:
-        X_disc = X_full_batch
-        y_disc = np.zeros((X_disc.shape[0], 2), dtype=np.uint8)
-        if label_smoothing:
-            y_disc[:, 1] = np.random.uniform(low=0.9, high=1, size=y_disc.shape[0])
+        # A to B loss
+        b_flat = K.batch_flatten(b)
+        bp_flat = K.batch_flatten(bp)
+        if is_b_binary:
+            L_atob = objectives.binary_crossentropy(b_flat, bp_flat)
         else:
-            y_disc[:, 1] = 1
+            L_atob = K.mean(K.abs(b_flat - bp_flat))
 
-        if label_flipping > 0:
-            p = np.random.binomial(1, label_flipping)
-            if p > 0:
-                y_disc[:, [0, 1]] = y_disc[:, [1, 0]]
+        return L_adv + alpha * L_atob
 
-    # Now extract patches form X_disc
-    if use_patches:
-        X_disc = extract_patches(X_disc, image_dim_ordering, patch_size)
+    # This network is used to train the generator. Freeze the discriminator part.
+    pix2pix.get_layer('d').trainable = False
 
-    return X_disc, y_disc
+    pix2pix.compile(optimizer=opt, loss=pix2pix_loss)
+    return pix2pix
 
-def train_model(generator_model,
-                discriminator_model,
-                DCGAN_model,
-                X_full_train,
-                X_sketch_train,
-                batch_size,
-                nb_epoch,
-                epoch_size,
-                patch_size,  # type: Tuple[int, int]
-                label_smoothing = False,
-                label_flipping = False,
-                image_dim_ordering=None  # type: Optional[str]
-            ):
-    gen_loss = 100
-    disc_loss = 100
-
-    # Start training
-    print("Start training")
-    for e in range(nb_epoch):
-        # Initialize progbar and batch counter
-        progbar = generic_utils.Progbar(epoch_size)
-        batch_counter = 1
-        for X_full_batch, X_sketch_batch in gen_batch(X_full_train, X_sketch_train, batch_size):
-            X_disc, y_disc = get_disc_batch(X_full_batch,
-                                                       X_sketch_batch,
-                                                       generator_model,
-                                                       batch_counter,
-                                                       patch_size,
-                                                       image_dim_ordering,
-                                                       label_smoothing=label_smoothing,
-                                                       label_flipping=label_flipping)
-            # Update the discriminator
-            disc_loss = discriminator_model.train_on_batch(X_disc, y_disc)
-            X_gen_target, X_gen = next(gen_batch(X_full_train, X_sketch_train, batch_size))
-            # Create a batch to feed the generator model
-            #X_gen_target, X_gen = next(data_utils.gen_batch(X_full_train, X_sketch_train, batch_size))
-            y_gen = np.zeros((X_gen.shape[0], 2), dtype=np.uint8)
-            y_gen[:, 1] = 1
-
-            # Freeze the discriminator
-            discriminator_model.trainable = False
-            gen_loss = DCGAN_model.train_on_batch(X_gen, [X_gen_target, y_gen])
-            # Unfreeze the discriminator
-            discriminator_model.trainable = True
-
-            batch_counter += 1
 
 if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
     from pyqae.dnn import pix2pix
+
     doctest.testmod(pix2pix, verbose=True, optionflags=doctest.ELLIPSIS)

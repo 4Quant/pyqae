@@ -408,6 +408,44 @@ def add_normpos_transform(use_generator=False, dim_order='tf'):
                                       -1, 1, n_count))
 
 
+def add_radpos_transform(use_generator=False, dim_order='tf',
+                           range_function=None):
+    """
+        Adds XX, YY to image data,
+    The input is expected to be a
+        sample, ch, x, y
+        sample, ch, x, y, z
+    or ch at the end if tf is true
+    :param generator:
+    :param dim_order:
+    :param range_function: the function to use to creating the ranges in XYZ
+    :return:
+    >>> p = Pipeline([('add_pos',add_position_transform(True,'th'))])
+    >>> new_p = p.fit(np.zeros((1,1,2,2)),np.ones((1,1,2,2)))
+    >>> [x.shape for x in new_p.transform(np.arange(8).reshape((2,1,2,2)))]
+    [(3, 2, 2), (3, 2, 2)]
+    >>> p = Pipeline([('add_pos',add_position_transform(True,'tf'))])
+    >>> new_p = p.fit(np.zeros((1,2,2,1)),np.ones((1,2,2,1)))
+    >>> [x.shape for x in new_p.transform(np.arange(8).reshape((2,2,2,1)))]
+    [(2, 2, 3), (2, 2, 3)]
+    >>> p = Pipeline([('add_pos',add_position_transform(False,'th'))])
+    >>> new_p = p.fit(np.zeros((1,2,2,1)),np.ones((1,2,2,1)))
+    >>> new_p.transform(np.arange(4).reshape((1,1,2,2))).astype(int)
+    array([[[[0, 0],
+             [1, 1]],
+    <BLANKLINE>
+            [[0, 1],
+             [0, 1]],
+    <BLANKLINE>
+            [[0, 1],
+             [2, 3]]]])
+    """
+    meshgrid_kwargs = {}
+    if range_function is not None:
+        meshgrid_kwargs['rng_func'] = range_function
+    chan_fcn = lambda x_img: meshgridnd_like(x_img[0], **meshgrid_kwargs)
+    return ChannelPipeTransform(chan_fcn, use_generator, dim_order)
+
 from scipy.ndimage.morphology import distance_transform_edt as distmap
 
 
