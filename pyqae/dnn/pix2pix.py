@@ -3,26 +3,18 @@ retina repository at https://github.com/costapt/vess2ret
 """
 import os
 
-try:
-    assert os.environ[
-               'KERAS_BACKEND'] == 'theano', "Theano backend is expected!"
-except KeyError:
-    print("Backend for keras is undefined setting to theano for Pix2Pix")
-    os.environ['KERAS_BACKEND'] = 'theano'
-
 import keras
-from keras import objectives
 from keras import backend as K
+from keras import objectives
+from keras.layers import Input, merge
+from keras.layers.advanced_activations import LeakyReLU
+from keras.layers.convolutional import Convolution2D, Deconvolution2D
+from keras.layers.core import Activation, Dropout
+from keras.layers.normalization import BatchNormalization
 from keras.models import Model
 from keras.optimizers import Adam
-from keras.layers import Input, merge
+from pyqae.dnn import KERAS_2
 
-from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.normalization import BatchNormalization
-from keras.layers.convolutional import Convolution2D, Deconvolution2D
-
-from keras.layers.core import Activation, Dropout
-KERAS_2 = keras.__version__[0] == '2'
 try:
     # keras 2 imports
     from keras.layers.convolutional import Conv2DTranspose
@@ -33,12 +25,15 @@ except ImportError:
 
 K.set_image_dim_ordering('th')
 
-def concatenate_layers(inputs,concat_axis,mode='concat'):
+
+def concatenate_layers(inputs, concat_axis, mode='concat'):
     if KERAS_2:
-        assert mode=='concat',"Only concatenation is supported in this wrapper"
+        assert mode == 'concat', "Only concatenation is supported in this wrapper"
         return Concatenate(axis=concat_axis)(inputs)
     else:
         return merge(inputs=inputs, concat_axis=concat_axis)
+
+
 def Convolution(f, k=3, s=2, border_mode='same', **kwargs):
     """Convenience method for Convolutions."""
     if KERAS_2:
@@ -58,18 +53,21 @@ def Deconvolution(f, output_shape, k=2, s=2, **kwargs):
     if KERAS_2:
         return Conv2DTranspose(f,
                                kernel_size=(k, k),
-                               output_shape=output_shape,
                                strides=(s, s),
                                data_format=K.image_data_format(),
                                **kwargs)
     else:
-        return Deconvolution2D(f, k, k, output_shape=output_shape,
+        return Deconvolution2D(f, k, k,
+                               output_shape=output_shape,
                                subsample=(s, s), **kwargs)
 
 
 def BatchNorm(mode=2, axis=1, **kwargs):
     """Convenience method for BatchNormalization layers."""
-    return BatchNormalization(axis=axis, **kwargs)
+    if KERAS_2:
+        return BatchNormalization(axis=axis, **kwargs)
+    else:
+        return BatchNormalization(mode=2,axis=axis, **kwargs)
 
 
 def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
@@ -667,9 +665,403 @@ def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
     return pix2pix
 
 
+## Train functions
+import numpy as np
+class DirectDict(dict):
+    """
+    Dictionary that allows to access elements with dot notation.
+    ex:
+    >>> d = DirectDict({'key': 'val'})
+    >>> d.key
+    'val'
+    >>> d.key2 = 'val2'
+    >>> sorted(d.items(),key=lambda x: x[0])
+    [('key', 'val'), ('key2', 'val2')]
+    """
+
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+
+def discriminator_generator(it, atob, dout_size):
+    """
+    Generate batches for the discriminator.
+    Parameters:
+    - it: an iterator that returns a pair of images;
+    - atob: the generator network that maps an image to another representation;
+    - dout_size: the size of the output of the discriminator.
+    """
+    while True:
+        # Fake pair
+        a_fake, _ = next(it)
+        b_fake = atob.predict(a_fake)
+
+        # Real pair
+        a_real, b_real = next(it)
+
+        # Concatenate the channels. Images become (ch_a + ch_b) x 256 x 256
+        fake = np.concatenate((a_fake, b_fake), axis=1)
+        real = np.concatenate((a_real, b_real), axis=1)
+
+        # Concatenate fake and real pairs into a single batch
+        batch_x = np.concatenate((fake, real), axis=0)
+
+        # 1 is fake, 0 is real
+        batch_y = np.ones((batch_x.shape[0], 1) + dout_size)
+        batch_y[fake.shape[0]:] = 0
+
+        yield batch_x, batch_y
+
+
+def train_discriminator(d, it, samples_per_batch=20):
+    """Train the discriminator network."""
+    return d.fit_generator(it, samples_per_epoch=samples_per_batch*2, nb_epoch=1, verbose=False)
+
+
+def pix2pix_generator(it, dout_size):
+    """
+    Generate data for the generator network.
+    Parameters:
+    - it: an iterator that returns a pair of images;
+    - dout_size: the size of the output of the discriminator.
+    """
+    for a, b in it:
+        # 1 is fake, 0 is real
+        y = np.zeros((a.shape[0], 1) + dout_size)
+        yield [a, b], y
+
+
+def train_pix2pix(pix2pix, it, samples_per_batch=20):
+    """Train the generator network."""
+    return pix2pix.fit_generator(it, nb_epoch=1, samples_per_epoch=samples_per_batch, verbose=False)
+
+
+def evaluate(models, generators, losses, val_samples=192):
+    """Evaluate and display the losses of the models."""
+    # Get necessary generators
+    d_gen = generators.d_gen_val
+    p2p_gen = generators.p2p_gen_val
+
+    # Get necessary models
+    d = models.d
+    p2p = models.p2p
+
+    # Evaluate
+    d_loss = d.evaluate_generator(d_gen, val_samples)
+    p2p_loss = p2p.evaluate_generator(p2p_gen, val_samples)
+
+    losses['d_val'].append(d_loss)
+    losses['p2p_val'].append(p2p_loss)
+
+    print('')
+    print ('Train Losses of (D={0} / P2P={1});\n'
+           'Validation Losses of (D={2} / P2P={3})'.format(
+                losses['d'][-1], losses['p2p'][-1], d_loss, p2p_loss))
+
+    return d_loss, p2p_loss
+
+
+def model_creation(d, atob, params):
+    """Create all the necessary models."""
+    opt = Adam(lr=params.lr, beta_1=params.beta_1)
+    p2p = pix2pix(atob, d, params.a_ch, params.b_ch, alpha=params.alpha, opt=opt,
+                    is_a_binary=params.is_a_binary, is_b_binary=params.is_b_binary)
+
+    models = DirectDict({
+        'atob': atob,
+        'd': d,
+        'p2p': p2p,
+    })
+
+    return models
+
+
+def generators_creation(it_train, it_val, models, dout_size):
+    """Create all the necessary data generators."""
+    # Discriminator data generators
+    d_gen = discriminator_generator(it_train, models.atob, dout_size)
+    d_gen_val = discriminator_generator(it_val, models.atob, dout_size)
+
+    # Workaround to make tensorflow work. When atob.predict is called the first
+    # time it calls tf.get_default_graph. This should be done on the main thread
+    # and not inside fit_generator. See https://github.com/fchollet/keras/issues/2397
+    next(d_gen)
+
+    # pix2pix data generators
+    p2p_gen = pix2pix_generator(it_train, dout_size)
+    p2p_gen_val = pix2pix_generator(it_val, dout_size)
+
+    generators = DirectDict({
+        'd_gen': d_gen,
+        'd_gen_val': d_gen_val,
+        'p2p_gen': p2p_gen,
+        'p2p_gen_val': p2p_gen_val,
+    })
+
+    return generators
+
+
+def train_iteration(models, generators, losses, params):
+    """Perform a train iteration."""
+    # Get necessary generators
+    d_gen = generators.d_gen
+    p2p_gen = generators.p2p_gen
+
+    # Get necessary models
+    d = models.d
+    p2p = models.p2p
+
+    # Update the dscriminator
+    dhist = train_discriminator(d, d_gen, samples_per_batch=params.samples_per_batch)
+    losses['d'].extend(dhist.history['loss'])
+
+    # Update the generator
+    p2phist = train_pix2pix(p2p, p2p_gen, samples_per_batch=params.samples_per_batch)
+    losses['p2p'].extend(p2phist.history['loss'])
+
+
+from keras.preprocessing.image import apply_transform, flip_axis
+from keras.preprocessing.image import transform_matrix_offset_center
+from keras.preprocessing.image import Iterator, load_img, img_to_array
+
+
+class TwoArrayIterator(Iterator):
+    """Class to iterate A and B images at the same time.
+    Examples
+    --------
+    >>> im_a_shape, im_b_shape=(5,3,2,2), (5,7,2,2)
+    >>> ti_train=TwoArrayIterator(np.zeros(im_a_shape),np.ones(im_b_shape), target_size=im_a_shape[2:], batch_size=4, dim_ordering='th', seed=1234)
+    >>> batch_a, batch_b = next(ti_train)
+    >>> batch_a.shape
+    (4, 3, 2, 2)
+    >>> batch_b.shape
+    (4, 7, 2, 2)
+    >>> ['%2.2f' % np.std(c_img) for c_img in batch_a]
+     ['0.00', '0.00', '0.00', '0.00']
+    """
+
+    def __init__(self,
+                 a_np_arr,
+                 b_np_arr,
+                 is_a_binary=False, is_b_binary=False,
+                 target_size=(256, 256), rotation_range=0.,
+                 height_shift_range=0., width_shift_range=0., zoom_range=0.,
+                 fill_mode='constant', cval=0., horizontal_flip=False,
+                 vertical_flip=False,  dim_ordering='default', N=-1,
+                 batch_size=32, shuffle=True, seed=None):
+        """
+        Iterate through two directories at the same time.
+        Files under the directory A and B with the same name will be returned
+        at the same time.
+        Parameters:
+        - is_a_binary: converts A images to binary images. Applies a threshold of 0.5.
+        - is_b_binary: converts B images to binary images. Applies a threshold of 0.5.
+        - N: if -1 uses the entire dataset. Otherwise only uses a subset;
+        - batch_size: the size of the batches to create;
+        - shuffle: if True the order of the images in X will be shuffled;
+        - seed: seed for a random number generator.
+        """
+
+        self.filenames=range(a_np_arr.shape[0])
+
+        # Use only a subset of the files. Good to easily overfit the model
+        if N > 0:
+            np.random.shuffle(self.filenames)
+            self.filenames = self.filenames[:N]
+        self.N = len(self.filenames)
+        if self.N == 0:
+            raise Exception("""Did not find any pair in the dataset. Please check that """
+                            """the names and extensions of the pairs are exactly the same. """
+                            """Searched inside folders: {0} and {1}""")
+
+        self.dim_ordering = dim_ordering
+        if self.dim_ordering not in ('th', 'default', 'tf'):
+            raise Exception('dim_ordering should be one of "th", "tf" or "default". '
+                            'Got {0}'.format(self.dim_ordering))
+
+        self.target_size = target_size
+
+        self.is_a_binary = is_a_binary
+        self.is_b_binary = is_b_binary
+
+
+
+        self.load_to_memory = True
+
+        self.a = a_np_arr
+        self.b = b_np_arr
+
+
+
+        if self.dim_ordering in ('th', 'default'):
+            self.channel_index = 1
+            self.row_index = 2
+            self.col_index = 3
+        if dim_ordering == 'tf':
+            self.channel_index = 3
+            self.row_index = 1
+            self.col_index = 2
+
+        self.image_shape_a = self._get_image_shape(a_np_arr.shape[
+                                                       self.channel_index])
+        self.image_shape_b = self._get_image_shape(
+                                                   b_np_arr.shape[
+                                                       self.channel_index]
+                                                   )
+
+        self.rotation_range = rotation_range
+        self.height_shift_range = height_shift_range
+        self.width_shift_range = width_shift_range
+        self.fill_mode = fill_mode
+        self.cval = cval
+        self.horizontal_flip = horizontal_flip
+        self.vertical_flip = vertical_flip
+
+        if np.isscalar(zoom_range):
+            self.zoom_range = [1 - zoom_range, 1 + zoom_range]
+        elif len(zoom_range) == 2:
+            self.zoom_range = [zoom_range[0], zoom_range[1]]
+
+        super(TwoArrayIterator, self).__init__(len(self.filenames), batch_size,
+                                               shuffle, seed)
+
+    def _get_image_shape(self, channel_count):
+        """Auxiliar method to get the image shape given the color mode."""
+        if self.dim_ordering == 'tf':
+            return self.target_size + (channel_count,)
+        else:
+            return (channel_count,) + self.target_size
+
+    def _binarize(self, batch):
+        """Make input binary images have 0 and 1 values only."""
+        bin_batch = batch / 255.
+        bin_batch[bin_batch >= 0.5] = 1
+        bin_batch[bin_batch < 0.5] = 0
+        return bin_batch
+
+    def _normalize_for_tanh(self, batch):
+        """Make input image values lie between -1 and 1."""
+        tanh_batch = batch - 127.5
+        tanh_batch /= 127.5
+        return tanh_batch
+
+    def _load_img_pair(self, idx, load_from_memory):
+        """Get a pair of images with index idx."""
+        if load_from_memory:
+            a = self.a[idx]
+            b = self.b[idx]
+            return a, b
+
+        fname = self.filenames[idx]
+
+        a = load_img(os.path.join(self.a_dir, fname),
+                     grayscale=self.is_a_grayscale,
+                     target_size=self.target_size)
+        b = load_img(os.path.join(self.b_dir, fname),
+                     grayscale=self.is_b_grayscale,
+                     target_size=self.target_size)
+
+        a = img_to_array(a, self.dim_ordering)
+        b = img_to_array(b, self.dim_ordering)
+
+        return a, b
+
+    def _random_transform(self, a, b):
+        """
+        Random dataset augmentation.
+        Adapted from https://github.com/fchollet/keras/blob/master/keras/preprocessing/image.py
+        """
+        # a and b are single images, so they don't have image number at index 0
+        img_row_index = self.row_index - 1
+        img_col_index = self.col_index - 1
+        img_channel_index = self.channel_index - 1
+
+        # use composition of homographies to generate final transform that needs to be applied
+        if self.rotation_range:
+            theta = np.pi / 180 * np.random.uniform(-self.rotation_range, self.rotation_range)
+        else:
+            theta = 0
+        rotation_matrix = np.array([[np.cos(theta), -np.sin(theta), 0],
+                                    [np.sin(theta), np.cos(theta), 0],
+                                    [0, 0, 1]])
+        if self.height_shift_range:
+            tx = np.random.uniform(-self.height_shift_range, self.height_shift_range) * a.shape[img_row_index]
+        else:
+            tx = 0
+
+        if self.width_shift_range:
+            ty = np.random.uniform(-self.width_shift_range, self.width_shift_range) * a.shape[img_col_index]
+        else:
+            ty = 0
+
+        translation_matrix = np.array([[1, 0, tx],
+                                       [0, 1, ty],
+                                       [0, 0, 1]])
+
+        if self.zoom_range[0] == 1 and self.zoom_range[1] == 1:
+            zx, zy = 1, 1
+        else:
+            zx, zy = np.random.uniform(self.zoom_range[0], self.zoom_range[1], 2)
+        zoom_matrix = np.array([[zx, 0, 0],
+                                [0, zy, 0],
+                                [0, 0, 1]])
+
+        transform_matrix = np.dot(np.dot(rotation_matrix, translation_matrix), zoom_matrix)
+
+        h, w = a.shape[img_row_index], a.shape[img_col_index]
+        transform_matrix = transform_matrix_offset_center(transform_matrix, h, w)
+        a = apply_transform(a, transform_matrix, img_channel_index,
+                            fill_mode=self.fill_mode, cval=self.cval)
+        b = apply_transform(b, transform_matrix, img_channel_index,
+                            fill_mode=self.fill_mode, cval=self.cval)
+
+        if self.horizontal_flip:
+            if np.random.random() < 0.5:
+                a = flip_axis(a, img_col_index)
+                b = flip_axis(b, img_col_index)
+
+        if self.vertical_flip:
+            if np.random.random() < 0.5:
+                a = flip_axis(a, img_row_index)
+                b = flip_axis(b, img_row_index)
+
+        return a, b
+
+    def next(self):
+        """Get the next pair of the sequence."""
+        # Lock the iterator when the index is changed.
+        with self.lock:
+            index_array, _, current_batch_size = next(self.index_generator)
+
+        batch_a = np.zeros((current_batch_size,) + self.image_shape_a)
+        batch_b = np.zeros((current_batch_size,) + self.image_shape_b)
+
+        for i, j in enumerate(index_array):
+            a_img, b_img = self._load_img_pair(j, self.load_to_memory)
+            a_img, b_img = self._random_transform(a_img, b_img)
+
+            batch_a[i] = a_img
+            batch_b[i] = b_img
+
+        if self.is_a_binary:
+            batch_a = self._binarize(batch_a)
+        else:
+            batch_a = self._normalize_for_tanh(batch_a)
+
+        if self.is_b_binary:
+            batch_b = self._binarize(batch_b)
+        else:
+            batch_b = self._normalize_for_tanh(batch_b)
+
+        return [batch_a, batch_b]
+
 if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
     from pyqae.dnn import pix2pix
 
+    TEST_TF = True
+    if TEST_TF:
+        os.environ['KERAS_BACKEND'] = 'tensorflow'
+    else:
+        os.environ['KERAS_BACKEND'] = 'theano'
     doctest.testmod(pix2pix, verbose=True, optionflags=doctest.ELLIPSIS)
