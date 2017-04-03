@@ -41,8 +41,11 @@ def Convolution(f, k=3, s=2, border_mode='same', **kwargs):
 def Deconvolution(f, output_shape, k=2, s=2, **kwargs):
     """Convenience method for Transposed Convolutions."""
     if KERAS_2:
-        return Deconvolution2D(f, (k, k), output_shape=output_shape,
-                               subsample=(s, s), **kwargs)
+        return Deconvolution2D(f, (k, k),
+                               output_shape=output_shape,
+                               subsample=(s, s),
+                               data_format=K.image_data_format(),
+                               **kwargs)
     else:
         return Deconvolution2D(f, k, k, output_shape=output_shape,
                                subsample=(s, s), **kwargs)
@@ -65,145 +68,288 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     - is_binary: if is_binary is true, the last layer is followed by a sigmoid
     activation function, otherwise, a tanh is used.
     >>> K.set_image_dim_ordering('th')
-    >>> unet = g_unet(3, 4, 5, batch_size=7, is_binary=True)
+    >>> K.image_data_format()
+    'channels_first'
+    >>> unet = g_unet(1, 2, 3, batch_size=5, is_binary=True)
     TheanoShapedU-NET
+    >>> for ilay in unet.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> unet.summary()  #doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input (InputLayer)           (None, 1, 512, 512)       0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 3, 256, 256)       30
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 3, 256, 256)       12
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 3, 256, 256)       0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 6, 128, 128)       168
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 6, 128, 128)       24
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 6, 128, 128)       0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 12, 64, 64)        660
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 12, 64, 64)        48
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 12, 64, 64)        0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 24, 32, 32)        2616
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 32, 32)        96
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 32, 32)        0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 24, 16, 16)        5208
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 16, 16)        96
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 16, 16)        0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 24, 8, 8)          5208
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 8, 8)          96
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 8, 8)          0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 24, 4, 4)          5208
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 4, 4)          96
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 4, 4)          0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 24, 2, 2)          5208
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 2, 2)          96
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 2, 2)          0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 24, 1, 1)          2328
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 1, 1)          96
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 1, 1)          0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 24, 2, 2)          2328
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 2, 2)          96
+    _________________________________________________________________
+    dropout (Dropout)            (None, 24, 2, 2)          0
+    _________________________________________________________________
+    merge (Merge)                (None, 48, 2, 2)          0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 48, 2, 2)          0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 24, 4, 4)          4632
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 4, 4)          96
+    _________________________________________________________________
+    dropout (Dropout)            (None, 24, 4, 4)          0
+    _________________________________________________________________
+    merge (Merge)                (None, 48, 4, 4)          0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 48, 4, 4)          0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 24, 8, 8)          4632
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 8, 8)          96
+    _________________________________________________________________
+    dropout (Dropout)            (None, 24, 8, 8)          0
+    _________________________________________________________________
+    merge (Merge)                (None, 48, 8, 8)          0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 48, 8, 8)          0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 24, 16, 16)        4632
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 16, 16)        96
+    _________________________________________________________________
+    merge (Merge)                (None, 48, 16, 16)        0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 48, 16, 16)        0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 24, 32, 32)        4632
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 24, 32, 32)        96
+    _________________________________________________________________
+    merge (Merge)                (None, 48, 32, 32)        0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 48, 32, 32)        0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 12, 64, 64)        2316
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 12, 64, 64)        48
+    _________________________________________________________________
+    merge (Merge)                (None, 24, 64, 64)        0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 24, 64, 64)        0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 6, 128, 128)       582
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 6, 128, 128)       24
+    _________________________________________________________________
+    merge (Merge)                (None, 12, 128, 128)      0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 12, 128, 128)      0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 3, 256, 256)       147
+    _________________________________________________________________
+    batch_normalization (BatchNo (None, 3, 256, 256)       12
+    _________________________________________________________________
+    merge (Merge)                (None, 6, 256, 256)       0
+    _________________________________________________________________
+    leaky_re_lu (LeakyReLU)      (None, 6, 256, 256)       0
+    _________________________________________________________________
+    conv2d_transpose (Conv2DTran (None, 2, 512, 512)       50
+    _________________________________________________________________
+    activation (Activation)      (None, 2, 512, 512)       0
+    =================================================================
+    Total params: 51,809.0
+    Trainable params: 51,197.0
+    Non-trainable params: 612.0
+    _________________________________________________________________
     >>> K.set_image_dim_ordering('tf')
-    >>> unet2=g_unet(3, 4, 2, batch_size=6, is_binary=False)
+    >>> K.image_data_format()
+    'channels_last'
+    >>> unet2=g_unet(3, 4, 2, batch_size=7, is_binary=False)
     TensorflowShapedU-NET
+    >>> for ilay in unet2.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> unet2.summary()  #doctest: +NORMALIZE_WHITESPACE
     _________________________________________________________________
     Layer (type)                 Output Shape              Param #
     =================================================================
-    input_2 (InputLayer)         (None, 512, 512, 3)       0
+    input (InputLayer)           (None, 512, 512, 3)       0
     _________________________________________________________________
-    conv2d_10 (Conv2D)           (None, 256, 256, 2)       56
+    conv2d (Conv2D)              (None, 256, 256, 2)       56
     _________________________________________________________________
-    batch_normalization_11 (Batc (None, 256, 256, 2)       1024
+    batch_normalization (BatchNo (None, 256, 256, 2)       1024
     _________________________________________________________________
-    leaky_re_lu_10 (LeakyReLU)   (None, 256, 256, 2)       0
+    leaky_re_lu (LeakyReLU)      (None, 256, 256, 2)       0
     _________________________________________________________________
-    conv2d_11 (Conv2D)           (None, 128, 128, 4)       76
+    conv2d (Conv2D)              (None, 128, 128, 4)       76
     _________________________________________________________________
-    batch_normalization_12 (Batc (None, 128, 128, 4)       512
+    batch_normalization (BatchNo (None, 128, 128, 4)       512
     _________________________________________________________________
-    leaky_re_lu_11 (LeakyReLU)   (None, 128, 128, 4)       0
+    leaky_re_lu (LeakyReLU)      (None, 128, 128, 4)       0
     _________________________________________________________________
-    conv2d_12 (Conv2D)           (None, 64, 64, 8)         296
+    conv2d (Conv2D)              (None, 64, 64, 8)         296
     _________________________________________________________________
-    batch_normalization_13 (Batc (None, 64, 64, 8)         256
+    batch_normalization (BatchNo (None, 64, 64, 8)         256
     _________________________________________________________________
-    leaky_re_lu_12 (LeakyReLU)   (None, 64, 64, 8)         0
+    leaky_re_lu (LeakyReLU)      (None, 64, 64, 8)         0
     _________________________________________________________________
-    conv2d_13 (Conv2D)           (None, 32, 32, 16)        1168
+    conv2d (Conv2D)              (None, 32, 32, 16)        1168
     _________________________________________________________________
-    batch_normalization_14 (Batc (None, 32, 32, 16)        128
+    batch_normalization (BatchNo (None, 32, 32, 16)        128
     _________________________________________________________________
-    leaky_re_lu_13 (LeakyReLU)   (None, 32, 32, 16)        0
+    leaky_re_lu (LeakyReLU)      (None, 32, 32, 16)        0
     _________________________________________________________________
-    conv2d_14 (Conv2D)           (None, 16, 16, 16)        2320
+    conv2d (Conv2D)              (None, 16, 16, 16)        2320
     _________________________________________________________________
-    batch_normalization_15 (Batc (None, 16, 16, 16)        64
+    batch_normalization (BatchNo (None, 16, 16, 16)        64
     _________________________________________________________________
-    leaky_re_lu_14 (LeakyReLU)   (None, 16, 16, 16)        0
+    leaky_re_lu (LeakyReLU)      (None, 16, 16, 16)        0
     _________________________________________________________________
-    conv2d_15 (Conv2D)           (None, 8, 8, 16)          2320
+    conv2d (Conv2D)              (None, 8, 8, 16)          2320
     _________________________________________________________________
-    batch_normalization_16 (Batc (None, 8, 8, 16)          32
+    batch_normalization (BatchNo (None, 8, 8, 16)          32
     _________________________________________________________________
-    leaky_re_lu_15 (LeakyReLU)   (None, 8, 8, 16)          0
+    leaky_re_lu (LeakyReLU)      (None, 8, 8, 16)          0
     _________________________________________________________________
-    conv2d_16 (Conv2D)           (None, 4, 4, 16)          2320
+    conv2d (Conv2D)              (None, 4, 4, 16)          2320
     _________________________________________________________________
-    batch_normalization_17 (Batc (None, 4, 4, 16)          16
+    batch_normalization (BatchNo (None, 4, 4, 16)          16
     _________________________________________________________________
-    leaky_re_lu_16 (LeakyReLU)   (None, 4, 4, 16)          0
+    leaky_re_lu (LeakyReLU)      (None, 4, 4, 16)          0
     _________________________________________________________________
-    conv2d_17 (Conv2D)           (None, 2, 2, 16)          2320
+    conv2d (Conv2D)              (None, 2, 2, 16)          2320
     _________________________________________________________________
-    batch_normalization_18 (Batc (None, 2, 2, 16)          8
+    batch_normalization (BatchNo (None, 2, 2, 16)          8
     _________________________________________________________________
-    leaky_re_lu_17 (LeakyReLU)   (None, 2, 2, 16)          0
+    leaky_re_lu (LeakyReLU)      (None, 2, 2, 16)          0
     _________________________________________________________________
-    conv2d_18 (Conv2D)           (None, 1, 1, 16)          1040
+    conv2d (Conv2D)              (None, 1, 1, 16)          1040
     _________________________________________________________________
-    batch_normalization_19 (Batc (None, 1, 1, 16)          4
+    batch_normalization (BatchNo (None, 1, 1, 16)          4
     _________________________________________________________________
-    leaky_re_lu_18 (LeakyReLU)   (None, 1, 1, 16)          0
+    leaky_re_lu (LeakyReLU)      (None, 1, 1, 16)          0
     _________________________________________________________________
-    conv2d_transpose_2 (Conv2DTr (None, 2, 2, 16)          1040
+    conv2d_transpose (Conv2DTran (None, 2, 2, 16)          1040
     _________________________________________________________________
-    batch_normalization_20 (Batc (None, 2, 2, 16)          8
+    batch_normalization (BatchNo (None, 2, 2, 16)          8
     _________________________________________________________________
-    dropout_2 (Dropout)          (None, 2, 2, 16)          0
+    dropout (Dropout)            (None, 2, 2, 16)          0
     _________________________________________________________________
-    merge_2 (Merge)              (None, 2, 2, 32)          0
+    merge (Merge)                (None, 2, 2, 32)          0
     _________________________________________________________________
-    leaky_re_lu_19 (LeakyReLU)   (None, 2, 2, 32)          0
+    leaky_re_lu (LeakyReLU)      (None, 2, 2, 32)          0
     _________________________________________________________________
-    conv2d_transpose_3 (Conv2DTr (None, 4, 4, 16)          2064
+    conv2d_transpose (Conv2DTran (None, 4, 4, 16)          2064
     _________________________________________________________________
-    batch_normalization_21 (Batc (None, 4, 4, 16)          16
+    batch_normalization (BatchNo (None, 4, 4, 16)          16
     _________________________________________________________________
-    dropout_3 (Dropout)          (None, 4, 4, 16)          0
+    dropout (Dropout)            (None, 4, 4, 16)          0
     _________________________________________________________________
-    merge_3 (Merge)              (None, 4, 4, 32)          0
+    merge (Merge)                (None, 4, 4, 32)          0
     _________________________________________________________________
-    leaky_re_lu_20 (LeakyReLU)   (None, 4, 4, 32)          0
+    leaky_re_lu (LeakyReLU)      (None, 4, 4, 32)          0
     _________________________________________________________________
-    conv2d_transpose_4 (Conv2DTr (None, 8, 8, 16)          2064
+    conv2d_transpose (Conv2DTran (None, 8, 8, 16)          2064
     _________________________________________________________________
-    batch_normalization_22 (Batc (None, 8, 8, 16)          32
+    batch_normalization (BatchNo (None, 8, 8, 16)          32
     _________________________________________________________________
-    dropout_4 (Dropout)          (None, 8, 8, 16)          0
+    dropout (Dropout)            (None, 8, 8, 16)          0
     _________________________________________________________________
-    merge_4 (Merge)              (None, 8, 8, 32)          0
+    merge (Merge)                (None, 8, 8, 32)          0
     _________________________________________________________________
-    leaky_re_lu_21 (LeakyReLU)   (None, 8, 8, 32)          0
+    leaky_re_lu (LeakyReLU)      (None, 8, 8, 32)          0
     _________________________________________________________________
-    conv2d_transpose_5 (Conv2DTr (None, 16, 16, 16)        2064
+    conv2d_transpose (Conv2DTran (None, 16, 16, 16)        2064
     _________________________________________________________________
-    batch_normalization_23 (Batc (None, 16, 16, 16)        64
+    batch_normalization (BatchNo (None, 16, 16, 16)        64
     _________________________________________________________________
-    merge_5 (Merge)              (None, 16, 16, 32)        0
+    merge (Merge)                (None, 16, 16, 32)        0
     _________________________________________________________________
-    leaky_re_lu_22 (LeakyReLU)   (None, 16, 16, 32)        0
+    leaky_re_lu (LeakyReLU)      (None, 16, 16, 32)        0
     _________________________________________________________________
-    conv2d_transpose_6 (Conv2DTr (None, 32, 32, 16)        2064
+    conv2d_transpose (Conv2DTran (None, 32, 32, 16)        2064
     _________________________________________________________________
-    batch_normalization_24 (Batc (None, 32, 32, 16)        128
+    batch_normalization (BatchNo (None, 32, 32, 16)        128
     _________________________________________________________________
-    merge_6 (Merge)              (None, 32, 32, 32)        0
+    merge (Merge)                (None, 32, 32, 32)        0
     _________________________________________________________________
-    leaky_re_lu_23 (LeakyReLU)   (None, 32, 32, 32)        0
+    leaky_re_lu (LeakyReLU)      (None, 32, 32, 32)        0
     _________________________________________________________________
-    conv2d_transpose_7 (Conv2DTr (None, 64, 64, 8)         1032
+    conv2d_transpose (Conv2DTran (None, 64, 64, 8)         1032
     _________________________________________________________________
-    batch_normalization_25 (Batc (None, 64, 64, 8)         256
+    batch_normalization (BatchNo (None, 64, 64, 8)         256
     _________________________________________________________________
-    merge_7 (Merge)              (None, 64, 64, 16)        0
+    merge (Merge)                (None, 64, 64, 16)        0
     _________________________________________________________________
-    leaky_re_lu_24 (LeakyReLU)   (None, 64, 64, 16)        0
+    leaky_re_lu (LeakyReLU)      (None, 64, 64, 16)        0
     _________________________________________________________________
-    conv2d_transpose_8 (Conv2DTr (None, 128, 128, 4)       260
+    conv2d_transpose (Conv2DTran (None, 128, 128, 4)       260
     _________________________________________________________________
-    batch_normalization_26 (Batc (None, 128, 128, 4)       512
+    batch_normalization (BatchNo (None, 128, 128, 4)       512
     _________________________________________________________________
-    merge_8 (Merge)              (None, 128, 128, 8)       0
+    merge (Merge)                (None, 128, 128, 8)       0
     _________________________________________________________________
-    leaky_re_lu_25 (LeakyReLU)   (None, 128, 128, 8)       0
+    leaky_re_lu (LeakyReLU)      (None, 128, 128, 8)       0
     _________________________________________________________________
-    conv2d_transpose_9 (Conv2DTr (None, 256, 256, 2)       66
+    conv2d_transpose (Conv2DTran (None, 256, 256, 2)       66
     _________________________________________________________________
-    batch_normalization_27 (Batc (None, 256, 256, 2)       1024
+    batch_normalization (BatchNo (None, 256, 256, 2)       1024
     _________________________________________________________________
-    merge_9 (Merge)              (None, 256, 256, 4)       0
+    merge (Merge)                (None, 256, 256, 4)       0
     _________________________________________________________________
-    leaky_re_lu_26 (LeakyReLU)   (None, 256, 256, 4)       0
+    leaky_re_lu (LeakyReLU)      (None, 256, 256, 4)       0
     _________________________________________________________________
-    conv2d_transpose_10 (Conv2DT (None, 512, 512, 4)       68
+    conv2d_transpose (Conv2DTran (None, 512, 512, 4)       68
     _________________________________________________________________
-    activation_1 (Activation)    (None, 512, 512, 4)       0
+    activation (Activation)      (None, 512, 512, 4)       0
     =================================================================
     Total params: 26,722.0
     Trainable params: 24,680.0
@@ -217,11 +363,11 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     if True:
         if K.image_dim_ordering() == 'th':
             print('TheanoShapedU-NET')
-
             i = Input(shape=(in_ch, 512, 512))
 
             def get_deconv_shape(samples, channels, x_dim, y_dim):
                 return samples, channels, x_dim, y_dim
+
         elif K.image_dim_ordering() == 'tf':
             i = Input(shape=(512, 512, in_ch))
             print('TensorflowShapedU-NET')
@@ -366,31 +512,32 @@ def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d'):
     - nf: the number of filters of the first layer.
     >>> K.set_image_dim_ordering('th')
     >>> disc=discriminator(3,4,2)
+    >>> for ilay in disc.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> disc.summary() #doctest: +NORMALIZE_WHITESPACE
     _________________________________________________________________
     Layer (type)                 Output Shape              Param #
     =================================================================
-    input_1 (InputLayer)         (None, 7, 512, 512)       0
+    input (InputLayer)           (None, 7, 512, 512)       0
     _________________________________________________________________
-    conv2d_1 (Conv2D)            (None, 2, 256, 256)       128
+    conv2d (Conv2D)              (None, 2, 256, 256)       128
     _________________________________________________________________
-    leaky_re_lu_1 (LeakyReLU)    (None, 2, 256, 256)       0
+    leaky_re_lu (LeakyReLU)      (None, 2, 256, 256)       0
     _________________________________________________________________
-    conv2d_2 (Conv2D)            (None, 4, 128, 128)       76
+    conv2d (Conv2D)              (None, 4, 128, 128)       76
     _________________________________________________________________
-    leaky_re_lu_2 (LeakyReLU)    (None, 4, 128, 128)       0
+    leaky_re_lu (LeakyReLU)      (None, 4, 128, 128)       0
     _________________________________________________________________
-    conv2d_3 (Conv2D)            (None, 8, 64, 64)         296
+    conv2d (Conv2D)              (None, 8, 64, 64)         296
     _________________________________________________________________
-    leaky_re_lu_3 (LeakyReLU)    (None, 8, 64, 64)         0
+    leaky_re_lu (LeakyReLU)      (None, 8, 64, 64)         0
     _________________________________________________________________
-    conv2d_4 (Conv2D)            (None, 16, 32, 32)        1168
+    conv2d (Conv2D)              (None, 16, 32, 32)        1168
     _________________________________________________________________
-    leaky_re_lu_4 (LeakyReLU)    (None, 16, 32, 32)        0
+    leaky_re_lu (LeakyReLU)      (None, 16, 32, 32)        0
     _________________________________________________________________
-    conv2d_5 (Conv2D)            (None, 1, 16, 16)         145
+    conv2d (Conv2D)              (None, 1, 16, 16)         145
     _________________________________________________________________
-    activation_1 (Activation)    (None, 1, 16, 16)         0
+    activation (Activation)      (None, 1, 16, 16)         0
     =================================================================
     Total params: 1,813.0
     Trainable params: 1,813.0
@@ -446,10 +593,28 @@ def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
     :param opt:
     :param name:
     :return:
+    >>> K.set_image_dim_ordering('th')
     >>> unet = g_unet(3, 4, 2, batch_size=8, is_binary=False)
+    TheanoShapedU-NET
     >>> disc=discriminator(3,4,2)
     >>> pp_net=pix2pix(unet, disc, 3, 4)
+    >>> for ilay in pp_net.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> pp_net.summary()  #doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input (InputLayer)           (None, 3, 512, 512)       0
+    _________________________________________________________________
+     (Model)                     (None, 4, 512, 512)       23454
+    _________________________________________________________________
+    merge (Merge)                (None, 7, 512, 512)       0
+    _________________________________________________________________
+     (Model)                     (None, 1, 16, 16)         1813
+    =================================================================
+    Total params: 25,267.0
+    Trainable params: 24,859.0
+    Non-trainable params: 408.0
+    _________________________________________________________________
     """
     a = Input(shape=(a_ch, 512, 512))
     b = Input(shape=(b_ch, 512, 512))
