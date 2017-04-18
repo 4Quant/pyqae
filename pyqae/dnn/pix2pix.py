@@ -71,7 +71,7 @@ def BatchNorm(mode=2, axis=1, **kwargs):
 
 
 def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
-    # type: (int, int, int, int, bool, str) -> keras.models.Model
+    # type: (int, int, int, int, bool, str) -> keras.engine.training.Model
     """Define a U-Net.
 
     Input has shape in_ch x 512 x 512
@@ -447,10 +447,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
                            k=2, s=1)(x)
     dconv1 = BatchNorm()(dconv1)
     dconv1 = Dropout(0.5)(dconv1)
-    try:
-        x = concatenate_layers([dconv1, conv8], **merge_params)
-    except ValueError:
-        return Model(i, dconv1, name=name)
+    x = concatenate_layers([dconv1, conv8], **merge_params)
     x = LeakyReLU(0.2)(x)
     # nf*(8 + 8) x 2 x 2
 
@@ -517,7 +514,9 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
     return unet
 
 
-def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d'):
+def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d',
+                  x_wid=512, y_wid=512,n_layers=4):
+    # type: (...) -> keras.engine.training.Model
     """Define the discriminator network.
 
     Parameters:
@@ -557,25 +556,30 @@ def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d'):
     Trainable params: 1,813.0
     Non-trainable params: 0.0
     _________________________________________________________________
+    >>> simple_disc=discriminator(1,1,2,x_wid=32,y_wid=32,n_layers=0)
+    >>> for ilay in simple_disc.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
+    >>> simple_disc.summary() #doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input (InputLayer)           (None, 2, 32, 32)         0
+    _________________________________________________________________
+    conv2d (Conv2D)              (None, 1, 16, 16)         19
+    _________________________________________________________________
+    activation (Activation)      (None, 1, 16, 16)         0
+    =================================================================
+    Total params: 19.0
+    Trainable params: 19.0
+    Non-trainable params: 0.0
+    _________________________________________________________________
     """
-    i = Input(shape=(a_ch + b_ch, 512, 512))
+    i = Input(shape=(a_ch + b_ch, x_wid, y_wid))
+    x=i
 
     # (a_ch + b_ch) x 512 x 512
-    conv1 = Convolution(nf)(i)
-    x = LeakyReLU(0.2)(conv1)
-    # nf x 256 x 256
-
-    conv2 = Convolution(nf * 2)(x)
-    x = LeakyReLU(0.2)(conv2)
-    # nf*2 x 128 x 128
-
-    conv3 = Convolution(nf * 4)(x)
-    x = LeakyReLU(0.2)(conv3)
-    # nf*4 x 64 x 64
-
-    conv4 = Convolution(nf * 8)(x)
-    x = LeakyReLU(0.2)(conv4)
-    # nf*8 x 32 x 32
+    for ilay in range(n_layers):
+        x = Convolution(int(nf*np.power(2,ilay)))(x)
+        x = LeakyReLU(0.2)(x)
 
     conv5 = Convolution(1)(x)
     out = Activation('sigmoid')(conv5)
@@ -592,15 +596,18 @@ def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d'):
     return d
 
 
-def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
-            is_b_binary=False, opt=Adam(lr=2e-4, beta_1=0.5), name='pix2pix'):
-    # type: (...) -> keras.models.Model
+def pix2pix(atob, # type: keras.engine.training.Model
+            d, # type: keras.engine.training.Model
+            alpha=100,
+            is_a_binary=False,
+            is_b_binary=False,
+            opt=Adam(lr=2e-4, beta_1=0.5),
+            name='pix2pix'):
+    # type: (...) -> keras.engine.training.Model
     """
     Define the pix2pix network.
     :param atob:
     :param d:
-    :param a_ch:
-    :param b_ch:
     :param alpha:
     :param is_a_binary:
     :param is_b_binary:
@@ -611,7 +618,7 @@ def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
     >>> unet = g_unet(3, 4, 2, batch_size=8, is_binary=False)
     TheanoShapedU-NET
     >>> disc=discriminator(3,4,2)
-    >>> pp_net=pix2pix(unet, disc, 3, 4)
+    >>> pp_net=pix2pix(unet, disc)
     >>> for ilay in pp_net.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> pp_net.summary()  #doctest: +NORMALIZE_WHITESPACE
     _________________________________________________________________
@@ -629,9 +636,18 @@ def pix2pix(atob, d, a_ch, b_ch, alpha=100, is_a_binary=False,
     Trainable params: 24,859.0
     Non-trainable params: 408.0
     _________________________________________________________________
+    >>> from pyqae.dnn.petnet import build_2d_umodel
+    Backend for keras is undefined setting to theano for PETNET
+    >>> simple_unet = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest XRay', 1, 2)], crop_mode = False, use_bn = False, verbose = False, use_deconv=False)
+    >>> simple_disc=discriminator(1,1,2,x_wid=32,y_wid=32,n_layers=0)
+    >>> sp_net=pix2pix(simple_unet, simple_disc)
+    >>> for ilay in sp_net.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
+    >>> sp_net.summary()  #doctest: +NORMALIZE_WHITESPACE
     """
-    a = Input(shape=(a_ch, 512, 512))
-    b = Input(shape=(b_ch, 512, 512))
+    _, a_ch, x_wid, y_wid = atob.get_input_shape_at(0)
+    _, b_ch, x_wid, y_wid = atob.get_output_shape_at(0)
+    a = Input(shape=(a_ch, x_wid, x_wid))
+    b = Input(shape=(b_ch, y_wid, y_wid))
 
     # A -> B'
     bp = atob(a)
@@ -836,7 +852,7 @@ class TwoArrayIterator(Iterator):
     >>> batch_b.shape
     (4, 7, 2, 2)
     >>> ['%2.2f' % np.std(c_img) for c_img in batch_a]
-     ['0.00', '0.00', '0.00', '0.00']
+    ['0.00', '0.00', '0.00', '0.00']
     """
 
     def __init__(self,

@@ -311,7 +311,6 @@ def autocrop(in_vol,  # type: np.ndarray
     :param min_val:
     :return:
 
-    >>> import numpy as np
     >>> np.random.seed(1234)
     >>> autocrop(np.zeros((3,3)), 0).astype(np.bool)
     array([], shape=(0, 0), dtype=bool)

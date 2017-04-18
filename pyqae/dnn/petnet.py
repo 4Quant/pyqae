@@ -7,9 +7,12 @@ The unique aspect of PETCT is the ability to process data in different chains to
 """
 
 import os
+import warnings
 
 try:
-    assert os.environ['KERAS_BACKEND'] == 'theano', "Theano backend is expected!"
+    if os.environ[
+        'KERAS_BACKEND'] == 'theano':
+        warnings.warn("Theano backend is expected!", RuntimeWarning)
 except KeyError:
     print("Backend for keras is undefined setting to theano for PETNET")
     os.environ['KERAS_BACKEND'] = 'theano'
@@ -22,11 +25,15 @@ from keras.layers import Cropping2D
 from keras.models import Model
 from keras.layers import Dropout, BatchNormalization
 from keras.layers import Convolution2D, MaxPooling2D, UpSampling2D
-from keras.layers import merge, Input, Lambda
+from keras.layers.convolutional import Conv2DTranspose
+from keras.layers.advanced_activations import LeakyReLU
+from keras.layers import Input, Lambda
+from keras.layers.merge import concatenate
 from collections import defaultdict
 import numpy as np
 from pyqae.utils import Tuple, List, Dict, Any, Optional
 from pyqae.dnn import fix_name_tf
+
 
 def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
                      layers,  # type: int
@@ -42,7 +49,8 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
                      use_bn=True,
                      verbose=False,
                      single_input=False,
-                     input_dict = None # type: Dict[str, Tuple[Object, Object]]
+                     use_deconv=False,
+                     input_dict=None  # type: Dict[str, Tuple[Object, Object]]
                      ):
     """
 
@@ -77,12 +85,12 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
     if input_dict is None:
         input_dict = {}
 
-    def _make_input(*args, name = 'emptyInput', **kwargs):
+    def _make_input(*args, name='emptyInput', **kwargs):
         # keep track of all the inputs
         if name in input_dict:
             in_node, cur_node = input_dict[name]
         else:
-            cur_node = Input(*args, name = name, **kwargs)
+            cur_node = Input(*args, name=name, **kwargs)
             in_node = cur_node
 
         input_list.append(in_node)
@@ -90,31 +98,43 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
 
     if single_input:
         # this only works with theano ordering
-        full_ch_cnt = sum([branch_ch for branch_name, branch_ch, branch_depth in branches])
+        full_ch_cnt = sum(
+            [branch_ch for branch_name, branch_ch, branch_depth in branches])
         full_input = _make_input((full_ch_cnt, x_wid, y_wid))
         in_branches = []
         start_idx = 0
         for branch_name, branch_ch, branch_depth in branches:
-            in_branches += [Lambda(lambda x: x[:, start_idx:(start_idx + branch_ch), :, :],
-                                   output_shape=(branch_ch, x_wid, y_wid),
-                                   name=fix_name_tf(branch_name))(full_input)]
+            in_branches += [
+                Lambda(lambda x: x[:, start_idx:(start_idx + branch_ch), :, :],
+                       output_shape=(branch_ch, x_wid, y_wid),
+                       name=fix_name_tf(branch_name))(full_input)]
             start_idx += branch_ch
     else:
-        in_branches = [_make_input((branch_ch, x_wid, y_wid), name=fix_name_tf(branch_name))
+        in_branches = [_make_input((branch_ch, x_wid, y_wid),
+                                   name=fix_name_tf(branch_name))
                        for branch_name, branch_ch, branch_depth in branches]
 
-    for (branch_name, branch_ch, branch_depth), input_im in zip(branches, in_branches):
+    for (branch_name, branch_ch, branch_depth), input_im in zip(branches,
+                                                                in_branches):
         branch_id = fix_name_tf(branch_name)
         if branch_depth > 0:
-            fmap = conv_op(branch_depth, 3, name='A {} Prefiltering'.format(branch_id), border_mode=border_mode)(
+            fmap = conv_op(branch_depth, 3,
+                           name='A {} Prefiltering'.format(branch_id),
+                           border_mode=border_mode)(
                 input_im)
-            first_layer = conv_op(branch_depth, 3, name='B {} Prefiltering'.format(branch_id), border_mode=border_mode)(
+            first_layer = conv_op(branch_depth, 3,
+                                  name='B {} Prefiltering'.format(branch_id),
+                                  border_mode=border_mode)(
                 fmap)
         else:
             if crop_mode:
-                first_layer = crop_op(lay_kern_wid // 2, 'A {} PreSkip Cropping'.format(branch_id))(
+                first_layer = crop_op(lay_kern_wid // 2,
+                                      'A {} PreSkip Cropping'.format(
+                                          branch_id))(
                     input_im)
-                first_layer = crop_op(lay_kern_wid // 2, 'B {} PreSkip Cropping'.format(branch_id))(first_layer)
+                first_layer = crop_op(lay_kern_wid // 2,
+                                      'B {} PreSkip Cropping'.format(
+                                          branch_id))(first_layer)
             else:
                 first_layer = input_im
 
@@ -130,11 +150,16 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
 
             # only apply BN to the left pathway
 
-            pool_layers += [pool_op(pool_size, name='{} Downscaling [{}]'.format(branch_id, ilay))(last_layer)]
+            pool_layers += [pool_op(pool_size,
+                                    name='{} Downscaling [{}]'.format(
+                                        branch_id, ilay))(last_layer)]
             if use_bn:
                 last_layer = BatchNormalization(
-                    mode=0, axis=1, # TODO: change this for tensorflow
-                    name=fix_name_tf('{} Batch Normalization [{}]'.format(branch_id, ilay)))(pool_layers[-1])
+                    axis=1,  # TODO: change this for tensorflow
+                    name=fix_name_tf(
+                        '{} Batch Normalization [{}]'.format(branch_id,
+                                                             ilay)))(
+                    pool_layers[-1])
             else:
                 last_layer = pool_layers[-1]
             lay_depth = branch_depth * np.power(2, ilay + 1)
@@ -152,17 +177,27 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
             if lay_depth > 0:
                 post_conv_step = conv_op(lay_depth, lay_kern_wid,
                                          border_mode=border_mode,
-                                         name='A {} Feature Maps [{}]'.format(branch_id, ilay, lay_depth))(last_layer)
+                                         name='A {} Feature Maps [{}]'.format(
+                                             branch_id, ilay, lay_depth))(
+                    last_layer)
 
-                if use_b_conv: post_conv_step = conv_op(lay_depth, lay_kern_wid, border_mode=border_mode,
-                                                        name='B {} Feature-Maps [{}]'.format(branch_id, ilay,
-                                                                                             lay_depth))(post_conv_step)
+                if use_b_conv: post_conv_step = conv_op(lay_depth,
+                                                        lay_kern_wid,
+                                                        border_mode=border_mode,
+                                                        name='B {} Feature-Maps [{}]'.format(
+                                                            branch_id, ilay,
+                                                            lay_depth))(
+                    post_conv_step)
             else:
                 if crop_mode:
-                    post_conv_step = crop_op(lay_kern_wid // 2, 'A {} Skip Cropping [{}]'.format(branch_id, ilay))(
+                    post_conv_step = crop_op(lay_kern_wid // 2,
+                                             'A {} Skip Cropping [{}]'.format(
+                                                 branch_id, ilay))(
                         last_layer)
                     if use_b_conv:
-                        post_conv_step = crop_op(lay_kern_wid // 2, 'B {} Skip Cropping [{}]'.format(branch_id, ilay))(
+                        post_conv_step = crop_op(lay_kern_wid // 2,
+                                                 'B {} Skip Cropping [{}]'.format(
+                                                     branch_id, ilay))(
                             post_conv_step)
                 else:
                     post_conv_step = last_layer
@@ -170,69 +205,96 @@ def _build_nd_umodel(in_shape,  # type: Tuple[int, int]
             last_layer = post_conv_step
 
         # remove the last layer
-        if verbose: print('image layers', [i._keras_shape for i in conv_layers])
-        rev_layers = list(reversed(list(zip(range(layers + 1), conv_layers[:]))))
+        if verbose: print('image layers',
+                          [i._keras_shape for i in conv_layers])
+        rev_layers = list(
+            reversed(list(zip(range(layers + 1), conv_layers[:]))))
         # rev_layers += [(-1,first_layer)]
         branch_dict[branch_id]['input'] = input_im
         branch_dict[branch_id]['rev_layers'] = rev_layers
 
-    all_rev_layers = [c_branch['rev_layers'] for c_branch in branch_dict.values()]
+    all_rev_layers = [c_branch['rev_layers'] for c_branch in
+                      branch_dict.values()]
     all_inputs = [c_branch['input'] for c_branch in branch_dict.values()]
     last_layer = None
-    out_depth = np.sum([depth for _, _, depth in branches])  # just assume it is the sum of input depths
+    out_depth = np.sum([depth for _, _, depth in
+                        branches])  # just assume it is the sum of input depths
 
     for cur_rev_layers in zip(*all_rev_layers):
 
         merge_layers = [] if last_layer is None else [last_layer]
         if False:
-            out_layers = [i_pool for (branch_name, _, branch_depth), (ilay, i_pool) in zip(branches, cur_rev_layers)]
+            out_layers = [i_pool for
+                          (branch_name, _, branch_depth), (ilay, i_pool) in
+                          zip(branches, cur_rev_layers)]
             return Model(input=all_inputs, output=out_layers)
-        for (branch_name, _, branch_depth), (ilay, i_pool) in zip(branches, cur_rev_layers):
+        for (branch_name, _, branch_depth), (ilay, i_pool) in zip(branches,
+                                                                  cur_rev_layers):
             branch_id = fix_name_tf(branch_name)
             lay_depth = out_depth * np.power(2, ilay)
             if verbose: print(ilay, i_pool._keras_shape)
 
-            if crop_mode and (len(merge_layers) > 0) and (last_layer is not None):
-                assert last_layer is not None, "Last layer cannot be empty! {}, #{}, pool:{}".format(merge_layers, ilay,
-                                                                                                     i_pool)
-                crop_d = int(np.ceil((i_pool._keras_shape[2] - last_layer._keras_shape[2]) / 2))
+            if crop_mode and (len(merge_layers) > 0) and (
+                        last_layer is not None):
+                assert last_layer is not None, "Last layer cannot be empty! {}, #{}, pool:{}".format(
+                    merge_layers, ilay,
+                    i_pool)
+                crop_d = int(np.ceil(
+                    (i_pool._keras_shape[2] - last_layer._keras_shape[2]) / 2))
                 if crop_d > 0:
-                    if verbose: print('Shape Mismatch:', i_pool._keras_shape[2], last_layer._keras_shape[2], 'crop->',
+                    if verbose: print('Shape Mismatch:',
+                                      i_pool._keras_shape[2],
+                                      last_layer._keras_shape[2], 'crop->',
                                       crop_d)
-                    i_pool = crop_op(crop_d, '{} Cropping [{}]'.format(branch_id, ilay))(i_pool)
+                    i_pool = crop_op(crop_d,
+                                     '{} Cropping [{}]'.format(branch_id,
+                                                               ilay))(i_pool)
             merge_layers += [i_pool]
 
         if verbose: print('merging:', [x._keras_shape for x in merge_layers])
         if len(merge_layers) > 1:
-            cur_merge = merge(merge_layers, mode='concat',
-                              concat_axis=1,
-                              name=fix_name_tf('Mixing Original Data [{}]'.format(ilay + 1)))
+            cur_merge = concatenate(merge_layers,
+                                    axis=1,
+                                    name=fix_name_tf(
+                                        'Mixing Original Data [{}]'.format(
+                                            ilay + 1)))
         else:
             cur_merge = merge_layers[0]
 
         last_layer = cur_merge
 
         if ilay > 0:
-            cur_up = upscale_op(pool_size, name='Upsampling [{}]'.format(ilay + 1))(last_layer)
+            cur_up = upscale_op(lay_depth, pool_size, name='Upsampling [{'
+                                                           '}]'.format(
+                ilay + 1))(last_layer)
             last_layer = cur_up
 
             if dropout_rate > 0: last_layer = Dropout(dropout_rate,
-                                                      name=fix_name_tf('Random Removal [{}]'.format(ilay + 1)))(
-                last_layer)
-            a_conv = conv_op(lay_depth, 3, name='A Deconvolution [{}]'.format(ilay + 1), border_mode=border_mode)(
+                                                      name=fix_name_tf(
+                                                          'Random Removal [{}]'.format(
+                                                              ilay + 1)))(
                 last_layer)
 
-            if use_b_conv_out:
-                b_conv = conv_op(lay_depth, 3, name='B Deconvolution {}]'.format(ilay + 1), border_mode=border_mode)(
-                    a_conv)
-                last_layer = b_conv
-            else:
-                last_layer = a_conv
+            if not use_deconv:
+                a_conv = conv_op(lay_depth, 3,
+                                 name='A Deconvolution [{}]'.format(ilay + 1),
+                                 border_mode=border_mode)(
+                    last_layer)
+
+                if use_b_conv_out:
+                    b_conv = conv_op(lay_depth, 3,
+                                     name='B Deconvolution {}]'.format(
+                                         ilay + 1), border_mode=border_mode)(
+                        a_conv)
+                    last_layer = b_conv
+                else:
+                    last_layer = a_conv
 
     out_conv = conv_op(last_layer_depth, 1, activation='sigmoid',
-                       name='Calculating Probability', border_mode=border_mode)(last_layer)
+                       name='Calculating Probability',
+                       border_mode=border_mode)(last_layer)
 
-    model = Model(input=input_list, output=out_conv)
+    model = Model(inputs=input_list, outputs=out_conv)
 
     return model
 
@@ -249,7 +311,9 @@ def build_2d_umodel(in_img,
                     use_b_conv=True,
                     verbose=False,
                     single_input=False,
-                    input_dict = None
+                    input_dict=None,
+                    use_leakyrelu=False,
+                    use_deconv=False
                     ):
     """
 
@@ -262,7 +326,7 @@ def build_2d_umodel(in_img,
     :param branches:
     :param input_dict: a dictionary of input nodes
     :return:
-    >>> simple_mod = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest XRay', 1, 2)], crop_mode = False, use_bn = False, verbose = False)
+    >>> simple_mod = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest XRay', 1, 2)], crop_mode = False, use_bn = False, verbose = False, use_deconv=False)
     >>> len(simple_mod.layers)
     8
     >>> simple_mod.layers[-1].output_shape[1:]
@@ -310,20 +374,67 @@ def build_2d_umodel(in_img,
     16
     >>> cct_pos.layers[-1].output_shape[1:]
     (1, 26, 26)
+    >>> simple_mod = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest XRay', 1, 2)], crop_mode = False, use_bn = False, verbose = False, use_deconv=True)
+    >>> len(simple_mod.layers)
+    7
+    >>> simple_mod = build_2d_umodel(np.zeros((1,1,32,32)), 1, [('Chest XRay', 1, 2)], crop_mode = False, use_bn = False, verbose = False, use_deconv=True, use_leakyrelu=0.1)
+    >>> len(simple_mod.layers)
+    11
     """
-    conv_op = lambda n_filters, f_width, name, activation='relu', border_mode='same', **kwargs: Convolution2D(n_filters,
-                                                                                                              f_width,
-                                                                                                              f_width,
-                                                                                                              activation=activation,
-                                                                                                              border_mode=border_mode,
-                                                                                                              name=fix_name_tf(
-                                                                                                                  name),
-                                                                                                              **kwargs)
 
-    pool_op = lambda p_size, name, **kwargs: MaxPooling2D(pool_size=(p_size, p_size), name=fix_name_tf(name), **kwargs)
-    upscale_op = lambda p_size, name, **kwargs: UpSampling2D(size=(p_size, p_size), name=fix_name_tf(name), **kwargs)
-    crop_op = lambda crop_d, name, **kwargs: Cropping2D(cropping=((crop_d, crop_d), (crop_d, crop_d)),
-                                                        name=fix_name_tf(name))
+    raw_conv_op = lambda n_filters, f_width, name, activation='relu', \
+                         border_mode='same', **kwargs: Convolution2D(n_filters,
+                                                                     (f_width,
+                                                                      f_width),
+                                                                     strides=(
+                                                                         1, 1),
+                                                                     activation=activation,
+                                                                     padding=border_mode,
+                                                                     name=fix_name_tf(
+                                                                         name),
+                                                                     **kwargs)
+    if use_leakyrelu > 0:
+        conv_op = lambda n_filters, f_width, name, activation='relu', \
+                         border_mode='same', **kwargs: \
+            lambda *args: LeakyReLU(use_leakyrelu)(
+                raw_conv_op(n_filters, f_width,
+                            name,
+                            activation='linear')(
+                    *args))
+    else:
+        conv_op = raw_conv_op
+
+    pool_op = lambda p_size, name, **kwargs: MaxPooling2D(
+        pool_size=(p_size, p_size), name=fix_name_tf(name), **kwargs)
+
+    upscale_op = lambda n_filters, p_size, name, **kwargs: UpSampling2D(size=(
+        p_size, p_size), name=fix_name_tf(name), **kwargs)
+    if use_deconv:
+        raw_upscale_op = lambda n_filters, p_size, name, activation='relu',\
+                                **kwargs: \
+            Conv2DTranspose(
+                n_filters,
+                kernel_size=(2 * p_size, 2 * p_size),
+                strides=(p_size, p_size),
+                padding='same',
+                name=fix_name_tf(
+                    name),
+                data_format=K.image_data_format(),
+                activation=activation,
+                **kwargs)
+        if use_leakyrelu > 0:
+            upscale_op = lambda n_filters, p_size, name, **kwargs: \
+                lambda *args: LeakyReLU(use_leakyrelu)(
+                    raw_upscale_op(n_filters, p_size, name,
+                                   activation='linear', **kwargs)(
+                        *args))
+        else:
+            upscale_op = raw_upscale_op
+
+    crop_op = lambda crop_d, name, **kwargs: Cropping2D(
+        cropping=((crop_d, crop_d), (crop_d, crop_d)),
+        name=fix_name_tf(name))
+
     return _build_nd_umodel(in_img.shape[2:],
                             layers,
                             branches=branches,
@@ -340,7 +451,8 @@ def build_2d_umodel(in_img,
                             crop_mode=crop_mode,
                             single_input=single_input,
                             verbose=verbose,
-                            input_dict = input_dict)
+                            use_deconv=use_deconv,
+                            input_dict=input_dict)
 
 
 if __name__ == "__main__":

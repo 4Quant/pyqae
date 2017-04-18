@@ -1,5 +1,12 @@
-__doc__ = """A toolset for crawling through recursive directories of DICOM
-files and archives"""
+__doc__ = """
+A toolset for crawling through recursive directories of DICOM
+files and archives
+>>> n_ele=10000000
+>>> n_ele=10
+>>> gdict={}
+>>> for i in range(n_ele): gdict['%012d' % i] = True
+>>> for i in range(n_ele): _ = ('%012d' % i) in gdict
+"""
 
 MAX_VAL_LEN = 512  # don't need anything longer than 512 chars
 
@@ -12,9 +19,24 @@ except ImportError:
 import json
 import os
 from io import BytesIO
-from itertools import product
 from tarfile import TarFile
 from warnings import warn
+import hashlib
+
+def hash_path(path):
+    """
+
+    :param path:
+    :return:
+    >>> assert len(hash_path('/dir/md/bob'))<255
+    >>> hash_path('/dir/md/bob')
+    '75f2c6943b967a8e2568261f0abedf255ca824fe284453aabbbedb7c930edb413f3191a320020415c0fbf747edc54c42df36c66741227249701b7cddd90a1207'
+    >>> hash_path('/dir/sd/bob')
+    'c59559166a868b373dbcb47c8d89edbb3100392d8cecd4ce23b506cfc3d689f5f1d52b115e4354540994b904f4d00c1976994786621ed4d4d0f283507591054e'
+    """
+    str_path=str(path)
+    path_asc=str_path.encode('ascii')
+    return hashlib.sha512(path_asc).hexdigest()
 
 import pandas as pd
 
@@ -90,6 +112,34 @@ def recursive_walk_path(base_path, ext, only_first=False, verbose=False):
     return [(ext, c_file) for c_file in file_list]
 
 
+def mrecursive_walk_path(base_path, ext_only_first_pairs):
+    # type: (str, List[Tuple[str, bool]]) -> List[Tuple[str, str]]
+    """
+    Recursively browse a path and extract files which meet multiple criteria
+    :param base_path:
+    :param ext_only_first_pairs:
+    :return:
+    >>> mgen=mrecursive_walk_path(_res_dir,[('tar',False)])
+    >>> [(ext,os.path.basename(path)) for (ext, path) in mgen]
+    [('tar', 'dicom.tar')]
+    >>> mgen=mrecursive_walk_path(_res_dir,[('dcm',True)])
+    >>> [(ext,os.path.basename(path)) for (ext, path) in mgen]
+    [('dcm', '1-051.dcm'), ('dcm', '10-060.dcm')]
+    >>> mgen=mrecursive_walk_path(_res_dir,[('dcm',False)])
+    >>> [(ext,os.path.basename(path)) for (ext, path) in mgen]
+    [('dcm', '1-051.dcm'), ('dcm', '10-060.dcm'), ('dcm', '10-060.dcm')]
+    """
+    for root, dirs, files in os.walk(base_path, topdown=False):
+        for ext, only_first in ext_only_first_pairs:
+            n_files = filter(lambda x: '.{}'.format(ext) in x and
+                                       (not x.startswith('.')) and
+                                       (not x.startswith('~')), files)
+            for c_file in n_files:
+                yield (ext, os.path.join(root, c_file))
+                if only_first:
+                    break
+
+
 def read_tar_tags(tar_path, show_matching_files=False):
     """
     Read the dicom from a tar file
@@ -110,7 +160,7 @@ def read_tar_tags(tar_path, show_matching_files=False):
         all_files = [tar_info for tar_info in all_info if
                      not tar_info.isdir() and
                      (tar_info.name.endswith('.dcm') and (
-                     not os.path.basename(tar_info.name).startswith('.')))]
+                         not os.path.basename(tar_info.name).startswith('.')))]
         if show_matching_files:
             return [cfile.name for cfile in all_files]
         if len(all_files) > 0:
@@ -147,13 +197,13 @@ def extract_files(in_paths,  # type: Union[List[str],str[
     >>> all_data=extract_files(_test_paths,open_files=False)
     >>> len(all_data)
     3
-    >>> all_data[0]
-    ('tar', '/Users/mader/Dropbox/Informatics/pyqae-master/test/resources/dicom.tar')
+    >>> [(ext,os.path.basename(path)) for (ext, path) in all_data]
+    [('dcm', '1-051.dcm'), ('dcm', '10-060.dcm'), ('tar', 'dicom.tar')]
     >>> all_data=extract_files(_test_paths,open_files=True)
     >>> len(all_data)
     3
     >>> len(all_data[0])
-    179
+    178
     >>> all_data[0]['Image Type']
     ['ORIGINAL', 'PRIMARY', 'AXIAL']
     """
@@ -185,15 +235,13 @@ def extract_files_gen(in_paths,  # type: Union[List[str],str]
     >>> all_data=extract_files_gen([_res_dir],open_files=False)
     >>> type(all_data)
     <class 'generator'>
-    >>> all_out=list(all_data)
-    >>> all_out[0]
-    ('tar', '/Users/mader/Dropbox/Informatics/pyqae-master/test/resources/dicom.tar')
+    >>> [(ext,os.path.basename(path)) for (ext, path) in all_data]
+    [('dcm', '1-051.dcm'), ('dcm', '10-060.dcm'), ('tar', 'dicom.tar')]
     >>> all_data=extract_files_gen(_res_dir,open_files=False)
     >>> type(all_data)
     <class 'generator'>
-    >>> all_out=list(all_data)
-    >>> all_out[0]
-    ('tar', '/Users/mader/Dropbox/Informatics/pyqae-master/test/resources/dicom.tar')
+    >>> [(ext,os.path.basename(path)) for (ext, path) in all_data]
+    [('dcm', '1-051.dcm'), ('dcm', '10-060.dcm'), ('tar', 'dicom.tar')]
     >>> all_data=extract_files_gen(_res_dir,open_files=True)
     >>> len(list(all_data))
     3
@@ -204,12 +252,12 @@ def extract_files_gen(in_paths,  # type: Union[List[str],str]
         walk_args = DEFAULT_WALK_ARGS
     if walk_readers is None:
         walk_readers = DEFAULT_READERS
-    for path, (w_ext, only_first) in product(in_paths, walk_args):
-        n_files = recursive_walk_path(path, w_ext, only_first=only_first,
-                                      verbose=verbose)
+    for path in in_paths:
+        n_files = mrecursive_walk_path(path,
+                                       walk_args)
         for c_ext, c_file in n_files:
             if open_files:
-                yield walk_readers[w_ext](c_file)
+                yield walk_readers[c_ext](c_file)
             else:
                 yield (c_ext, c_file)
 
@@ -247,6 +295,38 @@ def write_json_jsonlite(path, c_dict):
         json.dump([(k, str(v)) for k, v in c_dict.items()], f)
 
 
+def extract_to_hjson(out_dir,
+                     in_paths,
+                     walk_args=None,  # type: Optional[List[Tuple[str,bool]]]
+                     walk_readers=None, # type: Optional[Dict[str,Callable[[str],Any]]]
+                     write=True):
+    """
+    Write to hashed paths instead of paths
+    :param out_dir:
+    :param in_paths:
+    :param verbose:
+    :param write:
+    :return:
+    >>> all_data=extract_to_hjson('fancy',_res_dir,write=False)
+    >>> all_data[0]
+    'fancy/7cdc0c37f7d98d7c5d33d12af920fec51ce4eac0681ff837460f55afcd2af83af1f8389eb09928b98fda144a207888792d69ec2c70e4f8c21a9b17369c0b5b65.json'
+    >>> len(all_data)
+    3
+        """
+    out_files=[]
+    if not os.path.exists(out_dir):
+        if write: os.mkdir(out_dir)
+    for c_ext, c_file in mrecursive_walk_path(in_paths, DEFAULT_WALK_ARGS):
+        path_name = os.path.join(out_dir,'%s.json' % (hash_path(c_file)))
+        if not os.path.exists(path_name):
+            c_dict=DEFAULT_READERS[c_ext](c_file)
+            if write:
+                write_json_jsonlite(path_name, c_dict)
+            else:
+                out_files += [path_name]
+    return out_files
+
+
 def extract_to_json(out_dir, in_paths, verbose=False, write=True):
     """
 
@@ -264,6 +344,7 @@ def extract_to_json(out_dir, in_paths, verbose=False, write=True):
     if not os.path.exists(out_dir):
         if write: os.mkdir(out_dir)
     out_files = []
+
     for i, c_dict in enumerate(extract_files_gen(in_paths,
                                                  open_files=True,
                                                  verbose=verbose)):
@@ -309,7 +390,7 @@ try:
                 os.path.join(out_dir, '{}.json'.format(x[1]))))
 
 
-    def extract_files_spark(sc,
+    def pair_extract_files_spark(sc,
                             in_files,
                             walk_args=None,
                             # type: Optional[List[Tuple[str,bool]]]
@@ -323,7 +404,7 @@ try:
         :param walk_args:
         :param walk_readers:
         :return:
-        >>> raw_dicom, df_dicom = extract_files_spark(sc,['/Users/mader/Documents/TCGA_DICOMS/'])
+        >>> raw_dicom, df_dicom = pair_extract_files_spark(sc,[_res_dir])
         >>> raw_dicom.count()
         880
         >>> df_dicom.count()
@@ -346,6 +427,27 @@ try:
         all_dicom_df = all_dicom_tags.mapPartitions(_make_df)
         return all_dicom_tags, all_dicom_df
 
+    def gen_extract_files_spark(sc, in_files,
+                                file_partitions=100,
+                                dicom_partitions=10000
+                                ):
+        """
+
+        :param sc:
+        :param in_files:
+        :param file_partitions:
+        :param dicom_partions:
+        :return:
+        >>> c_rdd=gen_extract_files_spark([_res_dir])
+        >>> type(c_rdd)
+        >>> len(c_rdd)
+        """
+        base_rdd = sc.parallelize(in_files,
+                                  file_partitions)
+        all_tags_rdd = base_rdd.flatMap(
+            lambda x: extract_files_gen(x)).repartition(dicom_partitions)
+        return all_tags_rdd
+
 
 except ImportError:
     warnings.warn("Pyspark is not available using simplespark backend instead",
@@ -362,5 +464,5 @@ if __name__ == '__main__':
     import sys
 
     out_path, in_path = sys.argv[1:]
-    print('Running deepcrawler on {},{}'.format(out_path, in_path))
-    extract_to_json(out_path, in_path)
+    print('Running deepcrawler on {}, {}'.format(out_path, in_path))
+    extract_to_hjson(out_path, in_path)
