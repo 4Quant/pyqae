@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+from pyqae.nd import meshgridnd_like
+from skimage.measure import label, regionprops
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -7,24 +9,35 @@ allowing meaningful spatial and medical information to be included in images
 """
 
 
-def _setup_and_test(in_func, *in_arrs):
+def _setup_and_test(in_func, *in_arrs, is_list = False):
     """
     For setting up a simple graph and testing it
     :param in_func:
-    :param in_arr:
+    :param in_arrs:
+    :param is_list:
     :return:
     """
     with tf.Graph().as_default() as g:
         in_vals = [tf.placeholder(dtype=tf.float32, shape=in_arr.shape) for
                    in_arr in in_arrs]
         out_val = in_func(*in_vals)
-        print('setup_net', [in_arr.shape for in_arr in in_arrs], out_val.shape)
+        if not is_list:
+            print('setup_net', [in_arr.shape for in_arr in in_arrs], out_val.shape)
+            out_list = [out_val]
+        else:
+            out_list = list(out_val)
     with tf.Session(graph=g) as c_sess:
-        return c_sess.run(fetches=[out_val],
+        sess_out = c_sess.run(fetches=out_list,
                           feed_dict={in_val: in_arr
                                      for in_val, in_arr in
-                                     zip(in_vals, in_arrs)})[0]
+                                     zip(in_vals, in_arrs)})
+        if is_list:
+            return sess_out
+        else:
+            return sess_out[0]
 
+
+_simple_dist_img = np.stack([np.eye(3), 0.5*np.ones((3,3))],-1)
 
 def add_vgrid_tf(in_layer,
                  x_cent,
@@ -132,9 +145,10 @@ def add_simple_grid_tf(in_layer,  # type: tf.Tensor
 
 
 def add_com_grid_tf(in_layer,
-                    layer_concat=False
+                    layer_concat=False,
+                    as_r_vec = False
                     ):
-    # type: (tf.Tensor, bool) -> tf.Tensor
+    # type: (tf.Tensor, bool, bool) -> tf.Tensor
     """
     Adds spatial grids to images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
@@ -143,7 +157,8 @@ def add_com_grid_tf(in_layer,
     :param in_layer:
     :param layer_concat:
     :return:
-    >>> out_img = _setup_and_test(add_com_grid_tf, np.ones((5, 4, 3, 2, 1)))
+    >>> _testimg = np.ones((5, 4, 3, 2, 1))
+    >>> out_img = _setup_and_test(add_com_grid_tf, _testimg)
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 3)
     >>> out_img.shape
     (5, 4, 3, 2, 3)
@@ -153,6 +168,12 @@ def add_com_grid_tf(in_layer,
     array([-1.,  0.,  1.], dtype=float32)
     >>> out_img[0, 0, 0, :, 2]
     array([-1.,  1.], dtype=float32)
+    >>> out_img = _setup_and_test(lambda x: add_com_grid_tf(x, as_r_vec=True), _testimg)
+    setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 1)
+    >>> out_img.shape
+    (5, 4, 3, 2, 1)
+    >>> out_img[0, :, 0, 0, 0]
+    array([ 1.73205078,  1.45296621,  1.45296621,  1.73205078], dtype=float32)
     """
     with tf.variable_scope('com_grid_op'):
         with tf.variable_scope('initialize'):
@@ -190,9 +211,177 @@ def add_com_grid_tf(in_layer,
                        for c_var, c_sm in zip(svar_list, sm_matlist)]
 
             xy_vec = tf.concat(out_var, -1)
-            # txy_vec = tf.tile(xy_vec, [batch_size, 1, 1, 1, 1])
+            if as_r_vec:
+                xy_vec = tf.expand_dims(
+                    tf.sqrt(tf.reduce_sum(tf.square(xy_vec), -1)),
+                    -1)
 
         if layer_concat:
             return tf.concat([in_layer, xy_vec], -1)
         else:
             return xy_vec
+
+def spatial_gradient_tf(in_img):
+    # type: (tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
+    """
+    Calculate the spatial gradient in x,y,z using tensorflow
+    The channel dimension is completely ignored and the batches are kept
+    consistent.
+    :param in_img: a 5d tensor sized as batch, x, y, z, channel
+    :return:
+    NOTE:: the doctests are written to only test the main region, due to
+    boundary issues the edges are different (not massively) between
+    np.gradient and this function, eventually a better edge scaling should
+    be implemented
+    >>> _testimg = np.ones((4, 4, 4))
+    >>> _testimg = np.sum(np.power(np.stack(meshgridnd_like(_testimg),-1),2),-1)
+    >>> _testimg = np.expand_dims(np.expand_dims(_testimg,0),-1)
+    >>> dx, dy, dz = _setup_and_test(spatial_gradient_tf, _testimg, is_list=True)
+    >>> dx.shape
+    (1, 4, 4, 4, 1)
+    >>> dy.shape
+    (1, 4, 4, 4, 1)
+    >>> dz.shape
+    (1, 4, 4, 4, 1)
+    >>> ndx, ndy, ndz = np.gradient(_testimg[0,:,:,:,0])
+    >>> [(a,b) for a,b in zip(ndx[1:-1,0,0],dx[0,1:-1,0,0,0])]
+    [(2.0, 2.0), (4.0, 4.0)]
+    >>> [(a,b) for a,b in zip(ndy[0,1:-1,0],dy[0,0,1:-1,0,0])]
+    [(2.0, 2.0), (4.0, 4.0)]
+    >>> [(a,b) for a,b in zip(ndz[0,0,1:-1],dz[0,0,0,1:-1,0])]
+    [(2.0, 2.0), (4.0, 4.0)]
+    >>> np.sum(ndx-dx[0,:,:,:,0],(1,2))
+    array([  8.,   0.,   0.,  40.])
+    >>> np.sum(ndy-dy[0,:,:,:,0], (0,2))
+    array([  8.,   0.,   0.,  40.])
+    >>> np.sum(ndz-dz[0,:,:,:,0], (0,1))
+    array([  8.,   0.,   0.,  40.])
+    """
+    with tf.variable_scope('spatial_gradient'):
+        pad_r = tf.pad(in_img, [[0, 0], [1, 1], [1, 1], [1, 1], [0, 0]],
+                       "SYMMETRIC")
+        dx_img = pad_r[:, 2:, 1:-1, 1:-1, :] - pad_r[:, 0:-2, 1:-1, 1:-1, :]
+        dy_img = pad_r[:, 1:-1, 2:, 1:-1, :] - pad_r[:, 1:-1, 0:-2, 1:-1, :]
+        dz_img = pad_r[:, 1:-1, 1:-1, 2:, :] - pad_r[:, 1:-1, 1:-1, 0:-2, :]
+        return (0.5*dx_img, 0.5*dy_img, 0.5*dz_img)
+
+def phi_coord_tf(r_img, z_rad = 0.0):
+    # type: (tf.Tensor, float) -> tf.Tensor
+    """
+    Calculate the phi coordinates for tensors using a single step
+    derivatives and arc-sin to create smooth functions
+    :param r_img:
+    :param z_rad:
+    :return:
+    >>> _testimg = np.ones((4, 3, 2))
+    >>> from scipy.ndimage.morphology import distance_transform_edt
+    >>> _testimg = distance_transform_edt(_testimg)
+    >>> _testimg = np.expand_dims(np.expand_dims(_testimg,0),-1)
+    >>> out_img = _setup_and_test(phi_coord_tf, _testimg)
+    setup_net [(1, 4, 3, 2, 1)] (1, 4, 3, 2, 3)
+    >>> out_img.shape
+    (1, 4, 3, 2, 3)
+    >>> out_img[0, :, 0, 0, 0]
+    array([ 0.33132678,  0.44735149,  0.46363372,  0.44513324], dtype=float32)
+    >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
+    >>> oimg = _setup_and_test(phi_coord_tf, ntimg)[0]
+    setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
+    >>> oimg[:, 0 , 0, 0]
+    array([-0.23227953, -0.        ,  0.        ])
+    >>> oimg[:, 1 , 0, 1]
+    array([-0.,  0.,  0.])
+    >>> oimg[:, 2 , 0, 2]
+    array([ 0.        ,  0.        , -0.10817345])
+    """
+    with tf.variable_scope('phi_coord'):
+        (dx_img, dy_img, dz_img) = spatial_gradient_tf(r_img)
+        dr_img = tf.sqrt(tf.square(dx_img) + tf.square(dy_img) + tf.square(dz_img))
+        mask_img = tf.cast(r_img>z_rad, tf.float32)
+        dphi_a_img = tf.asin(dx_img / dr_img) / np.pi * mask_img
+        dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
+        dphi_c_img = (tf.asin(dz_img / dr_img)) / np.pi * mask_img
+        return tf.concat([dphi_a_img, dphi_b_img, dphi_c_img], -1)
+
+def obj_to_phi_np(seg_img, z_rad = 0):
+    # type: (np.ndarray, float) -> np.ndarray
+    """
+    Create a phi mask from a given object
+    :param seg_img:
+    :param z_rad:
+    :return:
+    """
+    c_reg = regionprops((seg_img > 0).astype(int))[0]
+    return generate_phi_coord_np(seg_img,
+                                 centroid = c_reg.centroid,
+                                 zrad = z_rad)
+
+def generate_phi_coord_np(seg_img, centroid, z_rad = 0):
+    # type: (np.ndarray, Tuple[float, float, float], float) -> np.ndarray
+    """
+    Create the phi coordinate system
+    :param seg_img:
+    :param centroid:
+    :param z_rad:
+    :return:
+    """
+    xx, yy, zz = meshgridnd_like(seg_img)
+    r_img = np.sqrt(np.power(xx - centroid[0], 2) +
+                    np.power(yy - centroid[1], 2) +
+                    np.power(zz - centroid[2], 2))
+    return phi_coord_np(r_img, z_rad = z_rad)
+
+def phi_coord_np(r_img, z_rad):
+    # type: (np.ndarray, float) -> np.ndarray
+    """
+    Calculate the phi coordinates using numpy
+    :param r_img:
+    :param z_rad:
+    :return:
+    >>> _simple_dist_img.shape
+    (3, 3, 2)
+    >>> oimg = phi_coord_np(_simple_dist_img,0)
+    >>> oimg.shape
+    (3, 3, 2, 3)
+    >>> oimg[:, 0 , 0, 0]
+    array([-0.23227953, -0.        ,  0.        ])
+    >>> oimg[:, 1 , 0, 1]
+    array([-0.,  0.,  0.])
+    >>> oimg[:, 2 , 0, 2]
+    array([ 0.        ,  0.        , -0.10817345])
+    """
+    dx_img, dy_img, dz_img = np.gradient(r_img)
+    dr_img = np.sqrt(
+        np.power(dx_img, 2) + np.power(dy_img, 2) + np.power(dz_img, 2))
+    dphi_a_img = np.arcsin(dx_img / dr_img) / np.pi * (r_img > z_rad)
+    dphi_b_img = (np.arcsin(dy_img / dr_img)) / np.pi * (r_img > z_rad)
+    dphi_c_img = (np.arcsin(dz_img / dr_img)) / np.pi * (r_img > z_rad)
+    return np.stack([dphi_a_img, dphi_b_img, dphi_c_img], -1)
+
+def __compare_numpy_and_tf():
+    """
+    A series of functions for comparing tensorflow to numpy output and
+    making sure the differences are small enough to be tolerated
+    :return:
+    >>> s_range = np.linspace(-1,1, 10)
+    >>> _setup_and_test(lambda x: tf.cast(x>0, tf.float32), s_range)
+    setup_net [(10,)] (10,)
+    array([ 0.,  0.,  0.,  0.,  0.,  1.,  1.,  1.,  1.,  1.], dtype=float32)
+    >>> np_asin = np.arcsin(s_range)
+    >>> tf_asin = _setup_and_test(tf.asin, s_range)
+    setup_net [(10,)] (10,)
+    >>> (tf_asin - np_asin)/np_asin
+    array([ -4.80634556e-08,   1.35596255e-08,   1.19606977e-07,
+             4.65342369e-08,   1.46818079e-09,   1.46818079e-09,
+             4.65342372e-08,   1.19606977e-07,   1.35596256e-08,
+            -4.80634556e-08])
+    >>> oimg_np = phi_coord_np(_simple_dist_img,0)
+    >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
+    >>> oimg_tf = _setup_and_test(phi_coord_tf, ntimg)
+    setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
+    >>> (np.abs(oimg_tf[0]-oimg_np)/oimg_np*1000)
+    """
+    pass
+
+
+
+

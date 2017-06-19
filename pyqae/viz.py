@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image as PImage
 from matplotlib import animation, rc
 from matplotlib.pyplot import cm
+from itertools import chain
 
 from pyqae.utils import get_temp_filename, Tuple, Optional
 
@@ -247,6 +248,54 @@ def label_score(gt_labels, sp_segs):
     :param sp_segs:
     :return:
     """
+
+
+def _create_tf_graph():
+    import tensorflow as tf
+    from pyqae.dnn.layers import add_com_grid_tf
+    with tf.Graph().as_default() as g:
+        in_val = tf.placeholder(dtype=tf.float32, shape=(9, 4, 3, 2, 1))
+        out_val = add_com_grid_tf(in_val, False)
+    return g
+
+def tf_graph_to_dot(in_graph, add_nodes = True, add_edges = True):
+    # type: (tf.Graph, bool, bool) -> pydot.Dot
+    """
+    Great a graph from a tensorflow graph to dot
+    :param in_graph:
+    :param add_nodes:
+    :param add_edges:
+    :return:
+    >>> c_dot = tf_graph_to_dot(_create_tf_graph())
+    Number of nodes: 128
+    Number of edges: 162
+    >>> print(c_dot.to_string()[:60])
+    digraph G {
+    rankdir=UD;
+    concentrate=True;
+    node [shape=record
+    """
+    import pydot
+    dot = pydot.Dot()
+    dot.set('rankdir', 'UD')
+    dot.set('concentrate', True)
+    dot.set_node_defaults(shape='record')
+    all_ops = in_graph.get_operations()
+    all_tens_dict = {k: i for i,k in enumerate(set(chain(*[c_op.outputs for c_op in all_ops])))}
+    print('Number of nodes:', len(all_tens_dict.keys()))
+    if add_nodes:
+        for c_node in all_tens_dict.keys():
+            node = pydot.Node(c_node.name)#, label=label)
+            dot.add_node(node)
+    if add_edges:
+        edge_count = 0
+        for c_op in all_ops:
+            for c_output in c_op.outputs:
+                for c_input in c_op.inputs:
+                    dot.add_edge(pydot.Edge(c_input.name, c_output.name))
+                    edge_count+=1
+        print('Number of edges:', edge_count)
+    return dot
 
 if __name__ == '__main__':
     import doctest
