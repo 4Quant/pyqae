@@ -1,7 +1,12 @@
 import inspect
 import time
+import warnings
 from itertools import chain
-from typing import Any, Optional, Iterable
+try:
+    from typing import List
+    from typing import Any, Optional, Iterable
+except:
+    warnings.warn('Typing only needed in python 3')
 
 from pyqae.utils import TypeTool
 
@@ -11,8 +16,7 @@ append_dict_raw = lambda i_dict, o_dict: dict(list(i_dict.items()) + list(o_dict
 # TODO fix type type : (Dict[str, Any], Dict[str, Any]) -> Dict[str, Any]
 cflatten = lambda x: list(chain(*x))
 from collections import defaultdict
-import warnings
-from typing import List
+
 
 
 class LocalRDD(object):

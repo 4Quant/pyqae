@@ -265,3 +265,95 @@ class NetEncoder(object):
         new_net = NetEncoder(model)
         new_net.serialize()
         return new_net.save(out_dir, out_prefix)
+
+
+import pandas as pd
+
+def _export_edges(in_model):
+    # type: (keras.models.Model) -> pd.DataFrame
+    """
+    Convert a Keras model into the list of edges between nodes
+    :param in_model: 
+    :return: 
+    >>> from keras.applications import VGG16
+    >>> vnet = VGG16(True, weights = None)
+    >>> edge_df = _export_edges(vnet)
+    >>> edge_df.shape
+    (22, 2)
+    >>> edge_df.head(2)
+               from            to
+    0       input_1  block1_conv1
+    1  block1_conv1  block1_conv2
+    """
+    def get_var_count(c_layer):
+        return c_layer['config'].get('filters', 0)*np.prod(c_layer['config'].get('kernel_size', (0,0,0)))
+    def _unwrap(t_model):
+        for ilayer in t_model.get_config()['layers']:
+            for inode in ilayer['inbound_nodes']:
+                for jnode in inode:
+                    yield {'to': ilayer['name'],
+                           'from': jnode[0]
+                          }
+    return pd.DataFrame(_unwrap(in_model))
+
+
+def _export_nodes(t_model, input_shape = None):
+    # type: (keras.models.Model, Optional[List[int]]) -> pd.DataFrame
+    """
+    Export all of the nodes from a Keras neural networ
+    :param t_model: 
+    :param input_shape: 
+    :return: DataFrame with all nodes
+    >>> from keras.applications import VGG16
+    >>> vnet = VGG16(True, weights = None)
+    >>> node_df = _export_nodes(vnet)
+    >>> node_df.shape
+    (23, 9)
+    >>> node_df[['class_name', 'shape_x', 'shape_c', 'param_count']].head(2)
+       class_name  shape_x  shape_c  param_count
+    0  InputLayer    224.0        3            0
+    1      Conv2D    224.0       64         1792
+    """
+    all_nodes = {i.name: i for i in t_model.layers}
+    def get_shape(ilay):
+        if input_shape is not None:
+            try:
+                out_shape = ilay.compute_output_shape(input_shape = input_shape)
+            except:
+                out_shape = ilay.output_shape
+        else:
+            out_shape = ilay.output_shape
+        if len(out_shape)==1:
+            shape_str = 'n'
+        elif len(out_shape)==2:
+            shape_str = 'nc'
+        elif len(out_shape)==3:
+            shape_str = 'nxc'
+        elif len(out_shape)==4:
+            shape_str = 'nxyc'
+        elif len(out_shape)==5:
+            shape_str = 'nxyzc'
+        else:
+            shape_str = ['%02d' %  i for i in range(len(out_shape))]
+        return {'shape_{}'.format(k_name): k for k_name,k in zip(shape_str, out_shape) }
+    return pd.DataFrame([dict(name = i.name,
+                              channels = i.output_shape[-1],
+                             dof_count = sum([np.prod(cw.get_shape().as_list()) for cw in i.trainable_weights]),
+                              class_name = type(i).__name__,
+                              param_count = i.count_params(),
+                              **get_shape(i)
+                             ) for i in t_model.layers])
+
+
+def export_network_csv(in_model, out_base_name, input_shape = None):
+    """
+    Export a network as two csv files
+    :param in_model: 
+    :param out_base_name: 
+    :param input_shape: 
+    :return: 
+    """
+    out_df = _export_edges(in_model)
+    out_df.to_csv('{}_edge.csv'.format(out_base_name), index = False)
+    node_df = _export_nodes(in_model, input_shape)
+    node_df.to_csv('{}_node.csv'.format(out_base_name), index = False)

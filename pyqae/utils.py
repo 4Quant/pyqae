@@ -97,7 +97,13 @@ def _fix_col_names(t_prev_df, rep_char=""):
     return new_df
 
 
-from queue import Queue, Empty as queueEmpty
+try:
+    # python2
+    from Queue import Queue, Empty as queueEmpty
+except ImportError:
+    # python3
+    from queue import Queue, Empty as queueEmpty
+
 from threading import Thread
 from itertools import chain
 

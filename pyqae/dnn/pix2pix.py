@@ -1,6 +1,7 @@
 __doc__ = """The model definitions for the pix2pix network taken from the
 retina repository at https://github.com/costapt/vess2ret
 """
+
 import os
 
 import keras
@@ -515,7 +516,7 @@ def g_unet(in_ch, out_ch, nf, batch_size=1, is_binary=False, name='unet'):
 
 
 def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d',
-                  x_wid=512, y_wid=512,n_layers=4):
+                  x_wid=512, y_wid=512, n_layers=4):
     # type: (...) -> keras.engine.training.Model
     """Define the discriminator network.
 
@@ -523,6 +524,9 @@ def discriminator(a_ch, b_ch, nf, opt=Adam(lr=2e-4, beta_1=0.5), name='d',
     - a_ch: the number of channels of the first image;
     - b_ch: the number of channels of the second image;
     - nf: the number of filters of the first layer.
+    - n_layers: number of layers in the model
+    - x_wid: the width of the input image
+    - y_wid: the height of the input image
     >>> K.set_image_dim_ordering('th')
     >>> disc=discriminator(3,4,2)
     >>> for ilay in disc.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
@@ -643,6 +647,21 @@ def pix2pix(atob, # type: keras.engine.training.Model
     >>> sp_net=pix2pix(simple_unet, simple_disc)
     >>> for ilay in sp_net.layers: ilay.name='_'.join(ilay.name.split('_')[:-1]) # remove layer id
     >>> sp_net.summary()  #doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input (InputLayer)           (None, 1, 32, 32)         0
+    _________________________________________________________________
+    model (Model)                (None, 1, 32, 32)         141
+    _________________________________________________________________
+    concatenate (Concatenate)    (None, 2, 32, 32)         0
+    _________________________________________________________________
+     (Model)                     (None, 1, 16, 16)         19
+    =================================================================
+    Total params: 160.0
+    Trainable params: 160.0
+    Non-trainable params: 0.0
+    _________________________________________________________________
     """
     _, a_ch, x_wid, y_wid = atob.get_input_shape_at(0)
     _, b_ch, x_wid, y_wid = atob.get_output_shape_at(0)
@@ -730,7 +749,8 @@ def discriminator_generator(it, atob, dout_size):
 
 def train_discriminator(d, it, samples_per_batch=20):
     """Train the discriminator network."""
-    return d.fit_generator(it, samples_per_epoch=samples_per_batch*2, nb_epoch=1, verbose=False)
+    return d.fit_generator(it, steps_per_epoch=samples_per_batch*2,
+                           epochs=1, verbose=False)
 
 
 def pix2pix_generator(it, dout_size):
@@ -748,7 +768,7 @@ def pix2pix_generator(it, dout_size):
 
 def train_pix2pix(pix2pix, it, samples_per_batch=20):
     """Train the generator network."""
-    return pix2pix.fit_generator(it, nb_epoch=1, samples_per_epoch=samples_per_batch, verbose=False)
+    return pix2pix.fit_generator(it, epochs=1, steps_per_epoch=samples_per_batch, verbose=False)
 
 
 def evaluate(models, generators, losses, val_samples=192):
@@ -779,7 +799,7 @@ def evaluate(models, generators, losses, val_samples=192):
 def model_creation(d, atob, params):
     """Create all the necessary models."""
     opt = Adam(lr=params.lr, beta_1=params.beta_1)
-    p2p = pix2pix(atob, d, params.a_ch, params.b_ch, alpha=params.alpha, opt=opt,
+    p2p = pix2pix(atob, d, alpha=params.alpha, opt=opt,
                     is_a_binary=params.is_a_binary, is_b_binary=params.is_b_binary)
 
     models = DirectDict({

@@ -164,12 +164,23 @@ class WrappedChannelTransform(object):
              [0, 0, 1]]]])
     >>> from sklearn.neighbors import KNeighborsRegressor as KNR
     >>> wnr=WrappedChannelTransform(KNR(1),'th',use_predict=True, flatten_y=True, class_predict=False)
-    >>> out_cls = np.expand_dims(np.expand_dims(np.eye(3),0),0)
-    >>> _ = wnc.fit(np.arange(18).reshape((1,2,3,3)),out_cls)
-    >>> wnc.transform(np.arange(18).reshape((1,2,3,3))).astype(int)
+    >>> x_data=np.arange(18).reshape((1,2,3,3))
+    >>> _ = wnr.fit(x_data,out_cls)
+    >>> wnr.transform(x_data).astype(int)
     array([[[[1, 0, 0],
              [0, 1, 0],
              [0, 0, 1]]]])
+    >>> from sklearn.ensemble import RandomForestRegressor as RFR
+    >>> wnf=WrappedChannelTransform(RFR(),'th',use_predict=True, flatten_y=True, class_predict=False)
+    >>> _ = wnf.fit(x_data,out_cls)
+    >>> wnf.transform(x_data).astype(int)
+    array([[[[0, 0, 0],
+             [0, 0, 0],
+             [0, 0, 0]]]])
+    >>> wnf2=WrappedChannelTransform(RFR(),'th',use_predict=True, flatten_y=True, class_predict=False)
+    >>> _ = wnf2.fit(x_data,np.concatenate([out_cls,out_cls],1))
+    >>> wnf2.transform(x_data).shape
+    (1, 2, 3, 3)
     """
 
     def __init__(self,
@@ -258,8 +269,14 @@ class WrappedChannelTransform(object):
     def predict(self, X):
         x_vec = self._flatten_data(X)
         p_result = self._transformer.predict(x_vec)
+
         if self.class_predict:
             p_result = np.expand_dims(p_result, 1)
+
+        if len(p_result.shape)==1:
+            # since the randomforest regressor returns 1d variables sometimes
+            p_result=np.expand_dims(p_result,1)
+
         return self._unflatten_image(p_result, X.shape)
 
     def transform(self, X):

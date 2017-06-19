@@ -1,5 +1,4 @@
 import warnings
-from typing import List
 
 import numpy as np
 from PIL import Image as PImg
@@ -228,7 +227,8 @@ def paths_to_tiled_image(paths, context=None, tile_size=(256, 256), padding=(0, 
     """
     path_rdd = paths if isinstance(paths, RDD) else context.parallelize(paths, **kwargs)
     _create_dmzi = lambda fle_path: DiskMappedLazyImage(fle_path, backend)
-    in_rdd = path_rdd.zipWithIndex().map(lambda x: (x[1], _create_dmzi(x[0])))
+    in_rdd = path_rdd.zipWithIndex().map(lambda x: (x[1], _create_dmzi(x[
+                                                                           0]))) # type: RDD[(int, DiskMappedLazyImage)]
     first_ds = _create_dmzi(path_rdd.first())
     ca_data = ChunkedArray(in_rdd,
                            shape=(path_rdd.count(),) + first_ds.shape,
@@ -246,7 +246,7 @@ def parallel_tile_image(paths, # type: Union[List[str], RDD[str]]
                          tile_w = 512,
                          tile_h = None, # type: Optional[int]
                          **kwargs):
-    # type: (...) -> RDD[Tuple(int, int, int), np.ndarray]
+    # type: (...) -> RDD[Tuple(int, int, int), np.ndarray], List[int]]
     """
     A function to read tiles in in parallel
     :param paths: a list of paths to read from
@@ -265,17 +265,129 @@ def parallel_tile_image(paths, # type: Union[List[str], RDD[str]]
     _, c_img = img_rdd.first()
     start_x = np.arange(0, c_img.shape[0], tile_w)
     start_y = np.arange(0, c_img.shape[1], tile_h)
-    start_xy = product(start_x, start_y)
+    start_xy = list(product(start_x, start_y))
     tile_ij_rdd = context.parallelize(start_xy, **kwargs)
     all_tiles = img_rdd.cartesian(tile_ij_rdd)
     def _clean_tile_order(x):
         (img_id, img_data), (tile_i, tile_j) = x
         return (img_id, tile_i, tile_j), img_data[tile_i:tile_i+tile_w, tile_j:tile_j+tile_h]
-    return all_tiles.map(_clean_tile_order)
+    return all_tiles.map(_clean_tile_order), c_img.shape
 
-def single_chunky_image(in_ds, context, tile_size=(256, 256), padding=(0, 0)):
+def parallel_tile_namedimage(paths, # type: Union[List[str], RDD[str]]
+                         context = None, # type: SparkContext
+                         backend=backends[-1], # type: LazyImageBackend
+                         tile_w = 512,
+                         tile_h = None, # type: Optional[int]
+                         **kwargs):
+    # type: (...) -> Tuple[RDD[Tuple(str, int, int), np.ndarray], List[int]]
+    """
+    A function to read tiles in in parallel
+    :param paths: a list of paths to read from
+    :param context: the spark context (or local spark context)
+    :param backend: the backend for reading
+    :param tile_w: the tile width
+    :param tile_h: the tile height
+    :param kwargs: arguments for parallelize
+    :return:
+        The tiled dataset as an RDD loaded in parallel and the dimensions of the image
+        as a list of integers (eg width, height)
+    """
+    path_rdd = paths if isinstance(paths, RDD) else context.parallelize(paths, **kwargs)
+    _create_dmzi = lambda fle_path: DiskMappedLazyImage(fle_path, backend)
+    img_rdd = path_rdd.map(lambda fle_path: (fle_path, _create_dmzi(fle_path)))
+    if tile_h is None:
+        tile_h = tile_w
+    _, c_img = img_rdd.first()
+    start_x = np.arange(0, c_img.shape[0], tile_w)
+    start_y = np.arange(0, c_img.shape[1], tile_h)
+    start_xy = list(product(start_x, start_y))
+    tile_ij_rdd = context.parallelize(start_xy, **kwargs)
+    all_tiles = img_rdd.cartesian(tile_ij_rdd)
+    def _clean_tile_order(x):
+        (img_id, img_data), (tile_i, tile_j) = x
+        return (img_id, tile_i, tile_j), img_data[tile_i:tile_i+tile_w, tile_j:tile_j+tile_h]
+    return all_tiles.map(_clean_tile_order), c_img.shape
+
+
+def dechunk_namedtileimage(tile_rdd, # type: RDD[Tuple[Tuple[str, int, int],np.ndarray]]
+                           slice_shape, # type: List[int]
+                           slice_dtype
+                           ):
+    # type: (...) -> RDD[Tuple[str, np.ndarray]]
+    """
+    Recombine the tiles generated from the namedimage tile function by using the
+    aggregateByKey method of spark
+    :param tile_rdd: 
+    :param slice_shape: 
+    :param slice_dtype: 
+    :return: 
+    """
+    def _sf_intrapartition(out_arr, c_input):
+        (c_idx, c_i, c_j), c_data = c_input
+        out_arr[c_i:(c_i + c_data.shape[0]),
+        c_j:(c_j + c_data.shape[1])] = c_data
+        return out_arr
+
+    def _cb_interpartition(out_arr1, out_arr2):
+        out_arr1 += out_arr2
+        return out_arr1
+
+    return tile_rdd.map(
+        lambda x: (x[0][0], (x[0], x[1]))).aggregateByKey(
+        zeroValue=np.zeros(slice_shape, dtype=slice_dtype),
+        seqFunc=_sf_intrapartition,
+        combFunc=_cb_interpartition)
+
+
+def create_z_projection(tile_rdd, # type: RDD[Tuple[Tuple[str, int, int],np.ndarray]]
+                        tile_size,
+                        out_image_name = 'mip',
+                        agg_func = np.max):
+    # type: RDD[Tuple[Tuple[str, int, int],np.ndarray]]
+    """
+    A function to create a Z projection through a stack of tiles
+    :param tile_rdd:  the input stack
+    :param tile_size: the size of the tiles
+    :param out_image_name: the name of the output image
+    :param agg_func: aggregation function (np.min and np.max are probably 
+    the only ones that make sense due to the 'fold' nature of the computation
+    :return: an output list of tiles with one name 'mip'
+    """
+    def _mip_agg(out_arr1, c_input):
+        _, out_arr2 = c_input
+        # crop the regions appropriately
+        max_dims = [min(out_arr1.shape[0], out_arr2.shape[0]),
+                    min(out_arr1.shape[1], out_arr2.shape[1])]
+        get_roi = lambda x: x[:max_dims[0], :max_dims[1]]
+        return agg_func(np.stack([get_roi(out_arr1),
+                                get_roi(out_arr2)],
+                               0), 0)
+
+    def _mip_combine(out_arr1, out_arr2):
+        # crop the regions appropriately
+        max_dims = [min(out_arr1.shape[0], out_arr2.shape[0]),
+                    min(out_arr1.shape[1], out_arr2.shape[1])]
+        get_roi = lambda x: x[:max_dims[0], :max_dims[1]]
+        return agg_func(np.stack([get_roi(out_arr1),
+                                get_roi(out_arr2)],
+                               0), 0)
+
+    mip_slice_tiles_rdd = tile_rdd.map(
+        lambda x: (x[0][1:3], (x[0], x[1]))).aggregateByKey(
+        zeroValue=np.zeros(tile_size,
+                           dtype=np.float32),
+        seqFunc=_mip_agg,
+        combFunc=_mip_combine).map(
+        lambda x: ((out_image_name, x[0][0], x[0][1]), x[1]))  # add a name back
+
+    return mip_slice_tiles_rdd
+
+def single_chunky_image(in_ds,
+                        context,
+                        tile_size=(256, 256),
+                        padding=(0, 0)):
     in_rdd = context.parallelize([((0,), in_ds)])
-    return ChunkedArray(in_rdd,
+    return ChunkedArray(in_rdd, # type: RDD[(int, np.ndarray)]
                         shape=(in_rdd.count(),) + in_ds.size,
                         split=1,
                         dtype=in_ds[0, 0].dtype
