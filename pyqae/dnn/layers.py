@@ -1,7 +1,8 @@
 import numpy as np
 import tensorflow as tf
+from skimage.measure import regionprops
+
 from pyqae.nd import meshgridnd_like
-from skimage.measure import label, regionprops
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -9,7 +10,7 @@ allowing meaningful spatial and medical information to be included in images
 """
 
 
-def _setup_and_test(in_func, *in_arrs, is_list = False):
+def _setup_and_test(in_func, *in_arrs, is_list=False):
     """
     For setting up a simple graph and testing it
     :param in_func:
@@ -22,22 +23,24 @@ def _setup_and_test(in_func, *in_arrs, is_list = False):
                    in_arr in in_arrs]
         out_val = in_func(*in_vals)
         if not is_list:
-            print('setup_net', [in_arr.shape for in_arr in in_arrs], out_val.shape)
+            print('setup_net', [in_arr.shape for in_arr in in_arrs],
+                  out_val.shape)
             out_list = [out_val]
         else:
             out_list = list(out_val)
     with tf.Session(graph=g) as c_sess:
         sess_out = c_sess.run(fetches=out_list,
-                          feed_dict={in_val: in_arr
-                                     for in_val, in_arr in
-                                     zip(in_vals, in_arrs)})
+                              feed_dict={in_val: in_arr
+                                         for in_val, in_arr in
+                                         zip(in_vals, in_arrs)})
         if is_list:
             return sess_out
         else:
             return sess_out[0]
 
 
-_simple_dist_img = np.stack([np.eye(3), 0.5*np.ones((3,3))],-1)
+_simple_dist_img = np.stack([np.eye(3), 0.5 * np.ones((3, 3))], -1)
+
 
 def add_vgrid_tf(in_layer,
                  x_cent,
@@ -146,7 +149,7 @@ def add_simple_grid_tf(in_layer,  # type: tf.Tensor
 
 def add_com_grid_tf(in_layer,
                     layer_concat=False,
-                    as_r_vec = False
+                    as_r_vec=False
                     ):
     # type: (tf.Tensor, bool, bool) -> tf.Tensor
     """
@@ -221,6 +224,7 @@ def add_com_grid_tf(in_layer,
         else:
             return xy_vec
 
+
 def spatial_gradient_tf(in_img):
     # type: (tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
     """
@@ -263,9 +267,10 @@ def spatial_gradient_tf(in_img):
         dx_img = pad_r[:, 2:, 1:-1, 1:-1, :] - pad_r[:, 0:-2, 1:-1, 1:-1, :]
         dy_img = pad_r[:, 1:-1, 2:, 1:-1, :] - pad_r[:, 1:-1, 0:-2, 1:-1, :]
         dz_img = pad_r[:, 1:-1, 1:-1, 2:, :] - pad_r[:, 1:-1, 1:-1, 0:-2, :]
-        return (0.5*dx_img, 0.5*dy_img, 0.5*dz_img)
+        return (0.5 * dx_img, 0.5 * dy_img, 0.5 * dz_img)
 
-def phi_coord_tf(r_img, z_rad = 0.0):
+
+def phi_coord_tf(r_img, z_rad=0.0):
     # type: (tf.Tensor, float) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
@@ -289,20 +294,57 @@ def phi_coord_tf(r_img, z_rad = 0.0):
     >>> oimg[:, 0 , 0, 0]
     array([-0.23227953, -0.        ,  0.        ])
     >>> oimg[:, 1 , 0, 1]
-    array([-0.,  0.,  0.])
+    array([-0.,  0.,  0.], dtype=float32)
     >>> oimg[:, 2 , 0, 2]
-    array([ 0.        ,  0.        , -0.10817345])
+    array([        nan,  0.        , -0.10817345], dtype=float32)
     """
     with tf.variable_scope('phi_coord'):
         (dx_img, dy_img, dz_img) = spatial_gradient_tf(r_img)
-        dr_img = tf.sqrt(tf.square(dx_img) + tf.square(dy_img) + tf.square(dz_img))
-        mask_img = tf.cast(r_img>z_rad, tf.float32)
+        dr_img = tf.sqrt(
+            tf.square(dx_img) + tf.square(dy_img) + tf.square(dz_img))
+        mask_img = tf.cast(r_img > z_rad, tf.float32)
         dphi_a_img = tf.asin(dx_img / dr_img) / np.pi * mask_img
         dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
         dphi_c_img = (tf.asin(dz_img / dr_img)) / np.pi * mask_img
         return tf.concat([dphi_a_img, dphi_b_img, dphi_c_img], -1)
 
-def obj_to_phi_np(seg_img, z_rad = 0):
+
+def add_com_phi_grid_tf(in_layer,
+                        layer_concat=False,
+                        z_rad=0.0
+                        ):
+    # type: (tf.Tensor, bool, bool) -> tf.Tensor
+    """
+    Adds spatial phi grids to images for making segmentation easier
+    This particular example utilizes the image-weighted center of mass by
+    summing the input layer across the channels
+
+    :param in_layer:
+    :param layer_concat:
+    :param z_rad: minimum radius to include
+    :return:
+    >>> _testimg = np.ones((5, 4, 3, 2, 1))
+    >>> out_img = _setup_and_test(add_com_phi_grid_tf, _testimg)
+    setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 3)
+    >>> out_img.shape
+    (5, 4, 3, 2, 3)
+    >>> out_img[0, :, 0, 0, 0]
+    array([-0.22936395, -0.19433206,  0.19433206,  0.22936395], dtype=float32)
+    >>> out_img[0, 0, :, 0, 1]
+    array([-0.27063605,  0.        ,  0.27063605], dtype=float32)
+    >>> out_img[0, 0, 0, :, 2]
+    array([ 0.,  0.], dtype=float32)
+    """
+    with tf.variable_scope('add_com_phi_grid'):
+        r_vec = add_com_grid_tf(in_layer, layer_concat=False, as_r_vec=True)
+        phi_out = phi_coord_tf(r_vec, z_rad=z_rad)
+        if layer_concat:
+            return tf.concat([in_layer, phi_out], -1)
+        else:
+            return phi_out
+
+
+def obj_to_phi_np(seg_img, z_rad=0):
     # type: (np.ndarray, float) -> np.ndarray
     """
     Create a phi mask from a given object
@@ -312,10 +354,11 @@ def obj_to_phi_np(seg_img, z_rad = 0):
     """
     c_reg = regionprops((seg_img > 0).astype(int))[0]
     return generate_phi_coord_np(seg_img,
-                                 centroid = c_reg.centroid,
-                                 zrad = z_rad)
+                                 centroid=c_reg.centroid,
+                                 zrad=z_rad)
 
-def generate_phi_coord_np(seg_img, centroid, z_rad = 0):
+
+def generate_phi_coord_np(seg_img, centroid, z_rad=0):
     # type: (np.ndarray, Tuple[float, float, float], float) -> np.ndarray
     """
     Create the phi coordinate system
@@ -328,7 +371,8 @@ def generate_phi_coord_np(seg_img, centroid, z_rad = 0):
     r_img = np.sqrt(np.power(xx - centroid[0], 2) +
                     np.power(yy - centroid[1], 2) +
                     np.power(zz - centroid[2], 2))
-    return phi_coord_np(r_img, z_rad = z_rad)
+    return phi_coord_np(r_img, z_rad=z_rad)
+
 
 def phi_coord_np(r_img, z_rad):
     # type: (np.ndarray, float) -> np.ndarray
@@ -357,6 +401,7 @@ def phi_coord_np(r_img, z_rad):
     dphi_c_img = (np.arcsin(dz_img / dr_img)) / np.pi * (r_img > z_rad)
     return np.stack([dphi_a_img, dphi_b_img, dphi_c_img], -1)
 
+
 def __compare_numpy_and_tf():
     """
     A series of functions for comparing tensorflow to numpy output and
@@ -378,10 +423,6 @@ def __compare_numpy_and_tf():
     >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
     >>> oimg_tf = _setup_and_test(phi_coord_tf, ntimg)
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
-    >>> (np.abs(oimg_tf[0]-oimg_np)/oimg_np*1000)
+    >>> (np.abs(oimg_tf[0]-oimg_np)/(np.abs(oimg_np)+.1)*1000)
     """
     pass
-
-
-
-
