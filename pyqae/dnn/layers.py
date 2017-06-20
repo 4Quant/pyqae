@@ -426,3 +426,31 @@ def __compare_numpy_and_tf():
     >>> (np.abs(oimg_tf[0]-oimg_np)/(np.abs(oimg_np)+.1)*1000)
     """
     pass
+
+def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
+    """
+    Create reasonable weights for dilated convolutions so features/structure
+    are preserved and neednt be relearned. In the default settings it makes
+    the layer return exactly what is passed to it. As it learns this gets
+    more complicated
+    :param in_ch:
+    :param out_ch:
+    :param width_x:
+    :param width_y:
+    :return:
+    >>> from keras.models import Sequential
+    >>> from keras.layers import Conv2D
+    >>> t_model = Sequential()
+    >>> cw = create_dilated_convolutions_weights(1, 1, 1, 1)
+    >>> tlay = Conv2D(1, kernel_size = (3,3), dilation_rate=(5,5), weights = cw, input_shape = (None, None, 1), padding = 'same')
+    >>> t_model.add(tlay)
+    >>> out_img = t_model.predict(np.expand_dims(_simple_dist_img,-1))
+    >>> np.sum(np.abs(out_img[...,0]-_simple_dist_img))
+    0.0
+    """
+    assert in_ch == out_ch, "In and out should match"
+    out_w = np.zeros((2*width_x+1, 2*width_y+1, in_ch, out_ch), dtype = np.float32)
+    out_b = np.zeros(out_ch, dtype = np.float32)
+    for i_x, o_x in zip(range(in_ch), range(out_ch)):
+        out_w[width_x, width_y, i_x, o_x] = 1.0
+    return out_w, out_b
