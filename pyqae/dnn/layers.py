@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 from skimage.measure import regionprops
-
 from pyqae.nd import meshgridnd_like
 
 __doc__ = """
