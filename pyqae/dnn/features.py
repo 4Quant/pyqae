@@ -2,6 +2,7 @@ import numpy as np
 from keras.layers import Input, Conv3D, ZeroPadding3D, Cropping3D, add, multiply
 from keras.layers import Lambda
 from keras.models import Model
+from pyqae.dnn.layers import add_com_phi_grid_tf
 
 __doc__ = """
 A set of neural networks used to generate relevant features for further
@@ -54,7 +55,6 @@ def mask_net_3d(ishape,
     Trainable params: 0.0
     Non-trainable params: 2,148.0
     ____________________________________________________________________________________________________
-
     >>> inet2 = mask_net_3d((None, None, None, 1), (1, 1, 1), (2, 2, 2))
     >>> (100*inet2.predict(np.ones((1, 3, 3, 3, 1))).ravel()).astype(int)
     array([ 29,  44,  29,  44,  66,  44,  29,  44,  29,  44,  66,  44,  66,
@@ -102,3 +102,34 @@ def mask_net_3d(ishape,
     for ilay in out_model.layers:
         ilay.trainable = trainable
     return out_model
+
+def PhiComGrid3DLayer(z_rad, **args):
+    """
+    A PhiComGrid layer based on the add_com_phi_grid_tf function which take
+    the center of mass of the object in 3D and creates a arcsin map for the
+    3 coordinates
+    :param z_rad: the radius near the middle to black out (force 0)
+    :param args:
+    :return:
+    >>> from keras.models import Sequential
+    >>> t_model = Sequential()
+    >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, input_shape=(None, None, None, 1), name='PhiGrid'))
+    >>> t_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    PhiGrid (Lambda)             (None, None, None, None,  0
+    =================================================================
+    Total params: 0.0
+    Trainable params: 0.0
+    Non-trainable params: 0.0
+    _________________________________________________________________
+    >>> out_res = t_model.predict(np.ones((1, 3, 3, 3, 1)))
+    >>> out_res.shape
+    (1, 3, 3, 3, 3)
+    >>> out_res[0,:,0,0,0]
+    array([-0.19591327,  0.        ,  0.19591327], dtype=float32)
+    >>> out_res[0,:,0,0,1]
+    array([-0.19591327, -0.25      , -0.19591327], dtype=float32)
+    """
+    return Lambda(lambda x: add_com_phi_grid_tf(x, z_rad=0.0), **args)

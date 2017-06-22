@@ -15,6 +15,15 @@ def wdice_coef(weight, flip = False, smooth = 0.5):
     score)
     :param smooth: (smoothing coefficient to avoid issues in the 0/0 case
     :return:
+    >>> keval = _setup_keras_backend(2)
+    >>> gt_vec = np.expand_dims(np.eye(3),0)
+    >>> pred_vec = np.ones((1, 3, 3))
+    >>> keval(wdice_coef(1.0)(gt_vec, pred_vec))
+    array([[ 0.52]])
+    >>> keval(wdice_coef(weight = 0.1)(gt_vec, pred_vec))
+    array([[ 0.11]])
+    >>> keval(wdice_coef(weight = 10)(gt_vec, pred_vec))
+    array([[ 1.53]])
     """
     def cdice_score(y_true, y_pred):
         # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
@@ -30,6 +39,42 @@ def wdice_coef(weight, flip = False, smooth = 0.5):
         return (-1 if flip else 1)*(2. * weight * K.dot(y_true_f, K.transpose(y_pred_f)) + smooth) / ((weight*K.sum(y_true_f)) + K.sum(y_pred_f) + smooth)
     return cdice_score
 
+import os
+def _setup_keras_backend(dec = None):
+    """
+    Utility function for setting up Keras with tensorflow correctly
+    :param dec: decimal places to keep
+    :return:
+    """
+
+    os.environ['keras_backend'] = "tensorflow"
+    from keras import backend as K
+    if dec is None:
+        return K.get_session().run
+    else:
+        return lambda x: (K.get_session().run(x)*np.power(10,dec)).astype(
+            int)/np.power(10,dec)
+
+def wmae_loss(pos_penalty = 1.0, neg_penalty = 1.0):
+    """
+    Allows for the positive (overshoot of predictions) penalty to be rescaled
+    >>> keval = _setup_keras_backend(2)
+    >>> gt_vec = np.zeros((5,))
+    >>> pred_vec = np.linspace(-1, 1, 5)
+    >>> keval(wmae_loss()(gt_vec, pred_vec))
+    array([ 1.  ,  0.5 ,  0.  ,  0.33,  0.5 ])
+    >>> keval(wmae_loss(pos_penalty = 0.1)(gt_vec, pred_vec))
+    array([ 1.  ,  0.5 ,  0.  ,  0.03,  0.05])
+    >>> keval(wmae_loss(neg_penalty = 0.1)(gt_vec, pred_vec))
+    array([ 1.  ,  0.5 ,  0.  ,  0.83,  0.9 ])
+    """
+    def wmae(y_true, y_predict):
+        diff = y_true-y_predict
+        abs_diff = K.abs(diff)
+        neg_diff = (diff + abs_diff)/2.0
+        pos_diff = (abs_diff - diff)/2.0
+        return (pos_penalty*pos_diff+neg_penalty*neg_diff)/(pos_diff+neg_penalty)
+    return wmae
 
 def show_loss(loss_history):
     epich = np.cumsum(np.concatenate([np.linspace(0.5,1,len(mh.epoch)) for mh in loss_history]))
