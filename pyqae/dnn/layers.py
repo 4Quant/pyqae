@@ -276,8 +276,8 @@ def spatial_gradient_tf(in_img):
         return (0.5 * dx_img, 0.5 * dy_img, 0.5 * dz_img)
 
 
-def phi_coord_tf(r_img, z_rad=0.0):
-    # type: (tf.Tensor, float) -> tf.Tensor
+def phi_coord_tf(r_img, z_rad=0.0, include_r = False):
+    # type: (tf.Tensor, float, bool) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
     derivatives and arc-sin to create smooth functions
@@ -312,14 +312,18 @@ def phi_coord_tf(r_img, z_rad=0.0):
         dphi_a_img = tf.asin(dx_img / dr_img) / np.pi * mask_img
         dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
         dphi_c_img = (tf.asin(dz_img / dr_img)) / np.pi * mask_img
-        return tf.concat([dphi_a_img, dphi_b_img, dphi_c_img], -1)
+        out_vec = [dphi_a_img, dphi_b_img, dphi_c_img]
+        if include_r:
+            out_vec = [r_img] + out_vec
+        return tf.concat(out_vec, -1)
 
 
 def add_com_phi_grid_tf(in_layer,
                         layer_concat=False,
-                        z_rad=0.0
+                        z_rad=0.0,
+                        include_r = False
                         ):
-    # type: (tf.Tensor, bool, bool) -> tf.Tensor
+    # type: (tf.Tensor, bool, float, bool) -> tf.Tensor
     """
     Adds spatial phi grids to images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
@@ -328,6 +332,7 @@ def add_com_phi_grid_tf(in_layer,
     :param in_layer:
     :param layer_concat:
     :param z_rad: minimum radius to include
+    :param include_r: include the radius channel
     :return:
     >>> _testimg = np.ones((5, 4, 3, 2, 1))
     >>> out_img = _setup_and_test(add_com_phi_grid_tf, _testimg)
@@ -343,7 +348,7 @@ def add_com_phi_grid_tf(in_layer,
     """
     with tf.variable_scope('add_com_phi_grid'):
         r_vec = add_com_grid_tf(in_layer, layer_concat=False, as_r_vec=True)
-        phi_out = phi_coord_tf(r_vec, z_rad=z_rad)
+        phi_out = phi_coord_tf(r_vec, z_rad=z_rad, include_r = include_r)
         if layer_concat:
             return tf.concat([in_layer, phi_out], -1)
         else:
@@ -541,6 +546,10 @@ def gkern_nd(d=2, kernlen=21, nsigs=3, min_smooth_val=1e-2):
      [ 0.02  0.1   0.16  0.1   0.02]
      [ 0.01  0.06  0.1   0.06  0.01]
      [ 0.    0.01  0.02  0.01  0.  ]]
+    >>> pprint(gkern_nd(2, 3, .1))
+    [[  3.72e-44   1.93e-22   3.72e-44]
+     [  1.93e-22   1.00e+00   1.93e-22]
+     [  3.72e-44   1.93e-22   3.72e-44]]
     """
     if type(nsigs) is list:
         assert len(

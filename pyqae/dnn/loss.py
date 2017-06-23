@@ -11,6 +11,8 @@ def wdice_coef(weight, flip = False, smooth = 0.5):
     The weighted dice function allows for very negative or positive sets so the penalty for false positives can be tweaked
     a high weight makes false positives less of an issue
     :param weight: the weight to give to the positive class (TP vs FP)
+        weight = 0.1 causes FP to be strongly penalized
+        weight = 10 causes FP to be lightly penalized (see doc-tests)
     :param flip: if the value should be flipped (to use as loss instead of
     score)
     :param smooth: (smoothing coefficient to avoid issues in the 0/0 case

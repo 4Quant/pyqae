@@ -115,7 +115,7 @@ def mask_net_3d(ishape,
     return out_model
 
 
-def PhiComGrid3DLayer(z_rad, **args):
+def PhiComGrid3DLayer(z_rad, include_r, **args):
     """
     A PhiComGrid layer based on the add_com_phi_grid_tf function which take
     the center of mass of the object in 3D and creates a arcsin map for the
@@ -144,7 +144,10 @@ def PhiComGrid3DLayer(z_rad, **args):
     >>> out_res[0,:,0,0,1]
     array([-0.19591327, -0.25      , -0.19591327], dtype=float32)
     """
-    return Lambda(lambda x: add_com_phi_grid_tf(x, z_rad=0.0), **args)
+    return Lambda(lambda x: add_com_phi_grid_tf(x,
+                                                z_rad=z_rad,
+                                                include_r = include_r),
+                  **args)
 
 
 def get_diff_vecs(vec_count, loop=True):
@@ -259,7 +262,7 @@ def vdog_net_2d(gk_count,
                 min_width,
                 max_width,
                 d_noise=0,
-                input_shape=(None, None, 1),
+                input_shape=(None, None, 1), # type: Tuple[Optional[int], Optional[int], int]
                 static_diff_mat=False,
                 add_bn_layer=True,
                 k_dim=None,
@@ -383,15 +386,15 @@ def vdog_net_2d(gk_count,
     return out_model
 
 
-def vdog_net_3d(gk_count,
-                dk_count,
-                min_width,
-                max_width,
-                d_noise=0,
-                input_shape=(None, None, None, 1),
+def vdog_net_3d(gk_count, # type: int
+                dk_count, # type: int
+                min_width, # type: float
+                max_width, # type: float
+                d_noise=0, # type: float
+                input_shape=(None, None, None, 1), # type: Tuple[Optional[int], Optional[int], Optional[int], int]
                 static_diff_mat=False,
                 add_bn_layer=True,
-                k_dim=None,
+                k_dim=None, # type: Optional[int]
                 train_differences=True,
                 suffix=''):
     # type: (...) -> keras.models.Model
