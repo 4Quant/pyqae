@@ -273,6 +273,7 @@ from pyqae.dnn.layers import gkern_tf
 import tensorflow as tf
 import keras.backend as K
 
+
 def vdog_net_2d(gk_count,
                 dk_count,
                 min_width,
@@ -300,7 +301,7 @@ def vdog_net_2d(gk_count,
     :param train_differences: train the difference matrix
     :param k_dim: manually specify the kernel dimension
     :return:
-    >>> dog_model = vdog_net_2d(3, 2, 0.5, 1)
+    >>> dog_model = vdog_net_2d(3, 2, 0.5, 1.5, k_dim = 5, add_bn_layer = False)
     >>> dog_model.summary() #doctest: +NORMALIZE_WHITESPACE
     ____________________________________________________________________________________________________
     Layer (type)                     Output Shape          Param #     Connected to
@@ -312,32 +313,30 @@ def vdog_net_2d(gk_count,
     AllGaussianStep (Lambda)         (None, None, None, 3) 0
     ____________________________________________________________________________________________________
     DifferenceStep (Conv2D)          (None, None, None, 2) 6
-    ____________________________________________________________________________________________________
-    NormalizeDiffModel (BatchNormali (None, None, None, 2) 8
     ====================================================================================================
-    Total params: 14.0
-    Trainable params: 10.0
-    Non-trainable params: 4.0
+    Total params: 6.0
+    Trainable params: 6.0
+    Non-trainable params: 0.0
     ____________________________________________________________________________________________________
-    >>> in_img = 100*np.expand_dims(np.expand_dims(np.eye(5), 0),-1)
+    >>> in_img = 100*np.expand_dims(np.expand_dims(np.eye(12), 0),-1)
     >>> in_vox = np.array([1.0, 1.0]).reshape((1, 2))
     >>> iv = dog_model.predict([in_img, in_vox])
     >>> iv.shape
-    (1, 5, 5, 2)
-    >>> iv[0,:,:,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
-    array([[ 35, -15,  -1,   0,   0],
-           [-15,  34, -15,  -1,   0],
-           [ -1, -15,  34, -15,  -1],
-           [  0,  -1, -15,  34, -15],
-           [  0,   0,  -1, -15,  35]])
-    >>> in_vox2 = np.array([1.0, 0.5]).reshape((1, 2))
-    >>> iv2 = dog_model.predict([in_img, in_vox2])
-    >>> iv2[0,:,:,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
-    array([[19, -5, -3,  0,  0],
-           [-5, 16, -5, -3,  0],
-           [-3, -5, 16, -5, -3],
-           [ 0, -3, -5, 16, -5],
-           [ 0,  0, -3, -5, 19]])
+    (1, 12, 12, 2)
+    >>> iv[0,5:-5,5:-5,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
+    array([[7, 4],
+           [4, 7]])
+    >>> from scipy.ndimage import zoom # show the results are resolution indepndent
+    >>> in_vox2 = np.array([0.5, 0.5]).reshape((1, 2))
+    >>> in_img2 = zoom(in_img, (1, 2, 2, 1), order = 1)
+    >>> iv2 = dog_model.predict([in_img2, in_vox2])
+    >>> iv2z = zoom(iv2, (1, 0.5, 0.5, 1), order = 1)
+    >>> iv2z[0,5:-5,5:-5,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
+    array([[1, 0],
+           [0, 1]])
+    >>> np.mean(np.abs(iv2z-iv)[:,5:-5, 5:-5], (0, 3))
+    array([[ 6.40511036,  4.54674101],
+           [ 4.54674053,  6.40511036]], dtype=float32)
     """
     if k_dim is None:
         k_dim = int(np.clip((max_width - 2) * 2 + 1, 3, 9e9))

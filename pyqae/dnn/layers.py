@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from skimage.measure import regionprops
+
 from pyqae.nd import meshgridnd_like
 
 __doc__ = """
@@ -432,6 +433,7 @@ def __compare_numpy_and_tf():
     """
     pass
 
+
 def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
     """
     Create reasonable weights for dilated convolutions so features/structure
@@ -454,15 +456,18 @@ def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
     0.0
     """
     assert in_ch == out_ch, "In and out should match"
-    out_w = np.zeros((2*width_x+1, 2*width_y+1, in_ch, out_ch), dtype = np.float32)
-    out_b = np.zeros(out_ch, dtype = np.float32)
+    out_w = np.zeros((2 * width_x + 1, 2 * width_y + 1, in_ch, out_ch),
+                     dtype=np.float32)
+    out_b = np.zeros(out_ch, dtype=np.float32)
     for i_x, o_x in zip(range(in_ch), range(out_ch)):
         out_w[width_x, width_y, i_x, o_x] = 1.0
     return out_w, out_b
 
+
 from functools import reduce
 
-def gkern_tf(d = 2, kernlen = 21, nsigs = 3):
+
+def gkern_tf(d=2, kernlen=21, nsigs=3):
     # type: (...) -> tf.Tensor
     """
     Create n-d gaussian kernels as tensors
@@ -489,12 +494,14 @@ def gkern_tf(d = 2, kernlen = 21, nsigs = 3):
     """
     with tf.variable_scope('gaussian_kernel'):
         if type(nsigs) is list:
-            assert len(nsigs)==d, "Input sigma must be same shape as dimensions {}!={}".format(nsigs, d)
+            assert len(
+                nsigs) == d, "Input sigma must be same shape as dimensions {}!={}".format(
+                nsigs, d)
         else:
-            nsigs = [nsigs]*d
-        all_axs = [tf.linspace(-1.,1., kernlen)] * d
-        all_xxs = tf.meshgrid(*all_axs, indexing = 'ij')
-        all_dist = reduce(tf.add, [tf.square(cur_xx)/(np.square(nsig))
-                                                      for cur_xx, nsig in zip(all_xxs, nsigs)])
+            nsigs = [nsigs] * d
+        all_axs = [tf.linspace(-1., 1., kernlen)] * d
+        all_xxs = tf.meshgrid(*all_axs, indexing='ij')
+        all_dist = reduce(tf.add, [tf.square(cur_xx) / (2 * np.square(nsig))
+                                   for cur_xx, nsig in zip(all_xxs, nsigs)])
         kernel_raw = tf.exp(-all_dist)
-        return kernel_raw/tf.reduce_sum(kernel_raw)
+        return kernel_raw / tf.reduce_sum(kernel_raw)
