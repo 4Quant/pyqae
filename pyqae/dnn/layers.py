@@ -423,6 +423,12 @@ def __compare_numpy_and_tf():
     >>> oimg_tf = _setup_and_test(phi_coord_tf, ntimg)
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
     >>> (np.abs(oimg_tf[0]-oimg_np)/(np.abs(oimg_np)+.1)*1000)
+    >>> g_tf_mat = _setup_and_test(lambda x: gkern_tf(3, kernlen = 3,nsigs = x), np.array([1.0]))
+    setup_net [(1,)] (3, 3, 3)
+    >>> from pyqae.dnn.features import gkern_nd
+    >>> g_np_mat = gkern_nd(3, 3, 1.0)
+    >>> np.abs(g_tf_mat - g_np_mat).mean()
+    6.2127853633291919e-10
     """
     pass
 
@@ -453,3 +459,42 @@ def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
     for i_x, o_x in zip(range(in_ch), range(out_ch)):
         out_w[width_x, width_y, i_x, o_x] = 1.0
     return out_w, out_b
+
+from functools import reduce
+
+def gkern_tf(d = 2, kernlen = 21, nsigs = 3):
+    # type: (...) -> tf.Tensor
+    """
+    Create n-d gaussian kernels as tensors
+    :param d: dimension of the kernel
+    :param kernlen: length of the kernel (in x, y, z, ...)
+    :param nsigs: the sigma values for the kernel either 1 or same length as d
+    :return:
+    >>> gkern_tf(3, nsigs = tf.placeholder(dtype = tf.float32, shape = (1,)))
+    <tf.Tensor 'gaussian_kernel/truediv_3:0' shape=(21, 21, 21) dtype=float32>
+    >>> s_range = np.array([1.0])
+    >>> _setup_and_test(lambda x: gkern_tf(3, kernlen = 3,nsigs = x), s_range)
+    setup_net [(1,)] (3, 3, 3)
+    array([[[ 0.00952025,  0.02587872,  0.00952025],
+            [ 0.02587872,  0.07034566,  0.02587872],
+            [ 0.00952025,  0.02587872,  0.00952025]],
+    <BLANKLINE>
+           [[ 0.02587872,  0.07034566,  0.02587872],
+            [ 0.07034566,  0.19121934,  0.07034566],
+            [ 0.02587872,  0.07034566,  0.02587872]],
+    <BLANKLINE>
+           [[ 0.00952025,  0.02587872,  0.00952025],
+            [ 0.02587872,  0.07034566,  0.02587872],
+            [ 0.00952025,  0.02587872,  0.00952025]]], dtype=float32)
+    """
+    with tf.variable_scope('gaussian_kernel'):
+        if type(nsigs) is list:
+            assert len(nsigs)==d, "Input sigma must be same shape as dimensions {}!={}".format(nsigs, d)
+        else:
+            nsigs = [nsigs]*d
+        all_axs = [tf.linspace(-1.,1., kernlen)] * d
+        all_xxs = tf.meshgrid(*all_axs, indexing = 'ij')
+        all_dist = reduce(tf.add, [tf.square(cur_xx)/(np.square(nsig))
+                                                      for cur_xx, nsig in zip(all_xxs, nsigs)])
+        kernel_raw = tf.exp(-all_dist)
+        return kernel_raw/tf.reduce_sum(kernel_raw)
