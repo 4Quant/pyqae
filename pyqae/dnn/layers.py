@@ -3,6 +3,7 @@ import tensorflow as tf
 from skimage.measure import regionprops
 
 from pyqae.nd import meshgridnd_like
+from pyqae.utils import pprint
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -10,7 +11,7 @@ allowing meaningful spatial and medical information to be included in images
 """
 
 
-def _setup_and_test(in_func, *in_arrs, is_list=False):
+def _setup_and_test(in_func, *in_arrs, is_list=False, round = False):
     """
     For setting up a simple graph and testing it
     :param in_func:
@@ -34,9 +35,14 @@ def _setup_and_test(in_func, *in_arrs, is_list=False):
                                          for in_val, in_arr in
                                          zip(in_vals, in_arrs)})
         if is_list:
-            return sess_out
+            o_val = sess_out
         else:
-            return sess_out[0]
+            o_val =  sess_out[0]
+        if round:
+            return (np.array(o_val)*100).astype(int)/100
+        else:
+            return o_val
+
 
 
 _simple_dist_img = np.stack([np.eye(3), 0.5 * np.ones((3, 3))], -1)
@@ -423,13 +429,56 @@ def __compare_numpy_and_tf():
     >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
     >>> oimg_tf = _setup_and_test(phi_coord_tf, ntimg)
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
-    >>> (np.abs(oimg_tf[0]-oimg_np)/(np.abs(oimg_np)+.1)*1000)
-    >>> g_tf_mat = _setup_and_test(lambda x: gkern_tf(3, kernlen = 3,nsigs = x), np.array([1.0]))
-    setup_net [(1,)] (3, 3, 3)
-    >>> from pyqae.dnn.features import gkern_nd
-    >>> g_np_mat = gkern_nd(3, 3, 1.0)
-    >>> np.abs(g_tf_mat - g_np_mat).mean()
-    6.2127853633291919e-10
+    >>> pprint(np.abs(oimg_tf[0]-oimg_np)/(np.abs(oimg_np)+.1))
+    [[[[  8.07e-08   8.07e-08   5.67e-08]
+       [  0.00e+00   0.00e+00        nan]]
+    <BLANKLINE>
+      [[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00        nan]]
+    <BLANKLINE>
+      [[  0.00e+00   0.00e+00        nan]
+       [  0.00e+00   0.00e+00        nan]]]
+    <BLANKLINE>
+    <BLANKLINE>
+     [[[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00        nan]]
+    <BLANKLINE>
+      [[  0.00e+00   0.00e+00        nan]
+       [  0.00e+00   0.00e+00        nan]]
+    <BLANKLINE>
+      [[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00        nan]]]
+    <BLANKLINE>
+    <BLANKLINE>
+     [[[  0.00e+00   0.00e+00        nan]
+       [  0.00e+00   0.00e+00        nan]]
+    <BLANKLINE>
+      [[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00        nan]]
+    <BLANKLINE>
+      [[  9.00e-09   9.00e-09   2.09e-08]
+       [  0.00e+00   0.00e+00   4.97e-08]]]]
+    >>> g_tf_mat = _setup_and_test(lambda x: gkern_tf(2, kernlen = 5,nsigs = x), np.array([1.0]))
+    setup_net [(1,)] (5, 5)
+    >>> g_np_mat = gkern_nd(2, 5, 1.0)
+    >>> pprint(g_tf_mat)
+    [[ 0.    0.01  0.02  0.01  0.  ]
+     [ 0.01  0.06  0.1   0.06  0.01]
+     [ 0.02  0.1   0.16  0.1   0.02]
+     [ 0.01  0.06  0.1   0.06  0.01]
+     [ 0.    0.01  0.02  0.01  0.  ]]
+    >>> pprint(g_np_mat)
+    [[ 0.    0.01  0.02  0.01  0.  ]
+     [ 0.01  0.06  0.1   0.06  0.01]
+     [ 0.02  0.1   0.16  0.1   0.02]
+     [ 0.01  0.06  0.1   0.06  0.01]
+     [ 0.    0.01  0.02  0.01  0.  ]]
+    >>> pprint(np.abs(g_tf_mat - g_np_mat))
+    [[  4.27e-11   1.00e-09   4.37e-10   1.00e-09   4.27e-11]
+     [  1.00e-09   1.08e-09   3.65e-09   1.08e-09   1.00e-09]
+     [  4.37e-10   3.65e-09   3.15e-09   3.65e-09   4.37e-10]
+     [  1.00e-09   1.08e-09   3.65e-09   1.08e-09   1.00e-09]
+     [  4.27e-11   1.00e-09   4.37e-10   1.00e-09   4.27e-11]]
     """
     pass
 
@@ -466,8 +515,50 @@ def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
 
 from functools import reduce
 
+def gkern_nd(d=2, kernlen=21, nsigs=3, min_smooth_val=1e-2):
+    """
+    Create nd gaussian kernels as numpy arrays
+    :param d: dimension count
+    :param kernlen:
+    :param nsigs:
+    :param min_smooth_val:
+    :return:
+    >>> pprint(gkern_nd(3, 3, 1.0))
+    [[[ 0.02  0.03  0.02]
+      [ 0.03  0.06  0.03]
+      [ 0.02  0.03  0.02]]
+    <BLANKLINE>
+     [[ 0.03  0.06  0.03]
+      [ 0.06  0.09  0.06]
+      [ 0.03  0.06  0.03]]
+    <BLANKLINE>
+     [[ 0.02  0.03  0.02]
+      [ 0.03  0.06  0.03]
+      [ 0.02  0.03  0.02]]]
+    >>> pprint(gkern_nd(2, 5, 1.0))
+    [[ 0.    0.01  0.02  0.01  0.  ]
+     [ 0.01  0.06  0.1   0.06  0.01]
+     [ 0.02  0.1   0.16  0.1   0.02]
+     [ 0.01  0.06  0.1   0.06  0.01]
+     [ 0.    0.01  0.02  0.01  0.  ]]
+    """
+    if type(nsigs) is list:
+        assert len(
+            nsigs) == d, "Input sigma must be same shape as dimensions {}!={}".format(
+            nsigs, d)
+    else:
+        nsigs = [nsigs] * d
+    k_wid = (kernlen - 1) / 2
+    all_axs = [np.linspace(-k_wid, k_wid, kernlen)] * d
+    all_xxs = np.meshgrid(*all_axs)
+    all_dist = reduce(np.add, [
+        np.square(cur_xx) / (2*np.square(np.clip(nsig, min_smooth_val,
+                                                kernlen)))
+        for cur_xx, nsig in zip(all_xxs, nsigs)])
+    kernel_raw = np.exp(-all_dist)
+    return kernel_raw / kernel_raw.sum()
 
-def gkern_tf(d=2, kernlen=21, nsigs=3):
+def gkern_tf(d=2, kernlen=21, nsigs=3, norm = True):
     # type: (...) -> tf.Tensor
     """
     Create n-d gaussian kernels as tensors
@@ -478,19 +569,26 @@ def gkern_tf(d=2, kernlen=21, nsigs=3):
     >>> gkern_tf(3, nsigs = tf.placeholder(dtype = tf.float32, shape = (1,)))
     <tf.Tensor 'gaussian_kernel/truediv_3:0' shape=(21, 21, 21) dtype=float32>
     >>> s_range = np.array([1.0])
-    >>> _setup_and_test(lambda x: gkern_tf(3, kernlen = 3,nsigs = x), s_range)
+    >>> _setup_and_test(lambda x: gkern_tf(3, kernlen = 3,nsigs = x), s_range, round = True)
     setup_net [(1,)] (3, 3, 3)
-    array([[[ 0.00952025,  0.02587872,  0.00952025],
-            [ 0.02587872,  0.07034566,  0.02587872],
-            [ 0.00952025,  0.02587872,  0.00952025]],
+    array([[[ 0.02,  0.03,  0.02],
+            [ 0.03,  0.05,  0.03],
+            [ 0.02,  0.03,  0.02]],
     <BLANKLINE>
-           [[ 0.02587872,  0.07034566,  0.02587872],
-            [ 0.07034566,  0.19121934,  0.07034566],
-            [ 0.02587872,  0.07034566,  0.02587872]],
+           [[ 0.03,  0.05,  0.03],
+            [ 0.05,  0.09,  0.05],
+            [ 0.03,  0.05,  0.03]],
     <BLANKLINE>
-           [[ 0.00952025,  0.02587872,  0.00952025],
-            [ 0.02587872,  0.07034566,  0.02587872],
-            [ 0.00952025,  0.02587872,  0.00952025]]], dtype=float32)
+           [[ 0.02,  0.03,  0.02],
+            [ 0.03,  0.05,  0.03],
+            [ 0.02,  0.03,  0.02]]])
+    >>> _setup_and_test(lambda x: gkern_tf(2, kernlen = 5,nsigs = x), s_range, round = True)
+    setup_net [(1,)] (5, 5)
+    array([[ 0.  ,  0.01,  0.02,  0.01,  0.  ],
+           [ 0.01,  0.05,  0.09,  0.05,  0.01],
+           [ 0.02,  0.09,  0.16,  0.09,  0.02],
+           [ 0.01,  0.05,  0.09,  0.05,  0.01],
+           [ 0.  ,  0.01,  0.02,  0.01,  0.  ]])
     """
     with tf.variable_scope('gaussian_kernel'):
         if type(nsigs) is list:
@@ -499,9 +597,12 @@ def gkern_tf(d=2, kernlen=21, nsigs=3):
                 nsigs, d)
         else:
             nsigs = [nsigs] * d
-        all_axs = [tf.linspace(-1., 1., kernlen)] * d
+        k_wid = (kernlen-1)/2
+        all_axs = [tf.linspace(-k_wid, k_wid, kernlen)] * d
         all_xxs = tf.meshgrid(*all_axs, indexing='ij')
         all_dist = reduce(tf.add, [tf.square(cur_xx) / (2 * np.square(nsig))
                                    for cur_xx, nsig in zip(all_xxs, nsigs)])
         kernel_raw = tf.exp(-all_dist)
-        return kernel_raw / tf.reduce_sum(kernel_raw)
+        if norm:
+            kernel_raw = kernel_raw / tf.reduce_sum(kernel_raw)
+        return kernel_raw

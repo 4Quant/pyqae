@@ -77,7 +77,8 @@ def local_read_depth(in_folder, depth, ext='.dcm', inc_parent=False):
     out_files = []
     for i in range(depth + 1):
         c_wc_path = os.path.join(*(c_path + ['*'] * i + ['*' + ext]))
-        out_files += [] if (not inc_parent) and (i < depth) else glob(c_wc_path)
+        out_files += [] if (not inc_parent) and (i < depth) else glob(
+            c_wc_path)
     return out_files
 
 
@@ -106,6 +107,9 @@ except ImportError:
 
 from threading import Thread
 from itertools import chain
+
+pprint = lambda x, p=2: print(np.array_str(x, max_line_width=80, precision=
+p))
 
 
 def pqueue_map(in_func, in_plist, threads=None):
@@ -172,7 +176,8 @@ def pqueue_flatmapvalues(in_func, in_plist, threads=None):
 
 
 def show_partition_sizes(in_rdd):
-    return in_rdd.mapPartitionsWithIndex(lambda i, x_list: [[(i, len(list(x_list)))]]).collect()
+    return in_rdd.mapPartitionsWithIndex(
+        lambda i, x_list: [[(i, len(list(x_list)))]]).collect()
 
 
 def threaded_map(in_rdd, in_operation, threads_per_worker=None):
@@ -224,7 +229,8 @@ def threaded_flatmapvalues(in_rdd, in_operation, threads_per_worker=None):
     if threads_per_worker == 1: return in_rdd.flatMapValues(in_operation)
 
     def _part_flatmapvalues(x_list):
-        return pqueue_flatmapvalues(in_operation, x_list, threads=threads_per_worker)
+        return pqueue_flatmapvalues(in_operation, x_list,
+                                    threads=threads_per_worker)
 
     return in_rdd.mapPartitions(_part_flatmapvalues)
 
@@ -246,9 +252,11 @@ class NumpyAwareJSONEncoder(json.JSONEncoder):
 # dictionary tools
 filter_dict = lambda fcn, old_dict: dict(filter(fcn, old_dict.items()))
 dict_append = lambda idct, new_kvs: dict(list(idct.items()) + new_kvs)
-dict_kwappend = lambda idct, **new_kvs: dict(list(idct.items()) + list(new_kvs.items()))
+dict_kwappend = lambda idct, **new_kvs: dict(
+    list(idct.items()) + list(new_kvs.items()))
 
 from warnings import warn
+
 
 def scalar_attributes_list(im_props):
     """
@@ -264,16 +272,19 @@ def scalar_attributes_list(im_props):
         # does not yet return tuples
         try:
             if test_attribute[:1] != '_' and not \
-                    isinstance(getattr(im_props[0], test_attribute), np.ndarray):
+                    isinstance(getattr(im_props[0], test_attribute),
+                               np.ndarray):
                 attributes_list += [test_attribute]
         except Exception as e:
-            warn("Not implemented: {} - {}".format(test_attribute, e), RuntimeWarning)
+            warn("Not implemented: {} - {}".format(test_attribute, e),
+                 RuntimeWarning)
 
     return attributes_list
 
 
 def notsupported(mode):
-    logging.getLogger('pyqae').warn("Operation not supported in '%s' mode" % mode)
+    logging.getLogger('pyqae').warn(
+        "Operation not supported in '%s' mode" % mode)
     pass
 
 
@@ -287,7 +298,8 @@ def check_spark():
 
 def check_options(option, valid):
     if option not in valid:
-        raise ValueError("Option must be one of %s, got '%s'" % (str(valid)[1:-1], option))
+        raise ValueError(
+            "Option must be one of %s, got '%s'" % (str(valid)[1:-1], option))
 
 
 def check_path(path, credentials=None):
@@ -302,8 +314,9 @@ def check_path(path, credentials=None):
     reader = get_file_reader(path)(credentials=credentials)
     existing = reader.list(path, directories=True)
     if existing:
-        raise ValueError('Path %s appears to already exist. Specify a new directory, '
-                         'or call with overwrite=True to overwrite.' % path)
+        raise ValueError(
+            'Path %s appears to already exist. Specify a new directory, '
+            'or call with overwrite=True to overwrite.' % path)
 
 
 def connection_with_anon(credentials, anon=True):

@@ -1,9 +1,19 @@
+import itertools as itt
+
+import keras.backend as K
+import numpy as np
+import tensorflow as tf
+from keras.layers import Convolution2D, BatchNormalization
 from keras.layers import Input, Conv3D, ZeroPadding3D, Cropping3D, add, \
     multiply
 from keras.layers import Lambda
 from keras.models import Model
+from keras.models import Sequential
 
 from pyqae.dnn.layers import add_com_phi_grid_tf
+from pyqae.dnn.layers import gkern_nd
+from pyqae.dnn.layers import gkern_tf
+from pyqae.utils import pprint
 
 __doc__ = """
 A set of neural networks used to generate relevant features for further
@@ -137,27 +147,6 @@ def PhiComGrid3DLayer(z_rad, **args):
     return Lambda(lambda x: add_com_phi_grid_tf(x, z_rad=0.0), **args)
 
 
-import itertools as itt
-import numpy as np
-from functools import reduce
-
-
-def gkern_nd(d=2, kernlen=21, nsigs=3, min_smooth_val=1e-2):
-    if type(nsigs) is list:
-        assert len(
-            nsigs) == d, "Input sigma must be same shape as dimensions {}!={}".format(
-            nsigs, d)
-    else:
-        nsigs = [nsigs] * d
-    all_axs = [np.linspace(-1, 1, kernlen)] * d
-    all_xxs = np.meshgrid(*all_axs)
-    all_dist = reduce(np.add, [
-        np.square(cur_xx) / (np.square(np.clip(nsig, min_smooth_val, kernlen)))
-        for cur_xx, nsig in zip(all_xxs, nsigs)])
-    kernel_raw = np.exp(-all_dist)
-    return kernel_raw / kernel_raw.sum()
-
-
 def get_diff_vecs(vec_count, loop=True):
     c_var = True
     while c_var:
@@ -174,10 +163,6 @@ def get_diff_mat(vec_count, diff_count, loop=True):
     return np.hstack([c_vec for c_vec, _ in
                       zip(get_diff_vecs(vec_count, loop=loop),
                           range(diff_count))])
-
-
-from keras.layers import Convolution2D, BatchNormalization
-from keras.models import Sequential
 
 
 def dog_net_2d(gk_count,
@@ -225,9 +210,9 @@ def dog_net_2d(gk_count,
     >>> in_img = 1000*np.expand_dims(np.expand_dims(np.eye(3), 0),-1)
     >>> iv = dog_model.predict(in_img)
     >>> iv[0,:,:,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
-    array([[ 684, -203,  -92],
-           [-203,  592, -203],
-           [ -92, -203,  684]])
+    array([[397, -63, -90],
+           [-63, 307, -63],
+           [-90, -63, 397]])
     """
     if k_dim is None:
         k_dim = int(np.clip((max_width - 2) * 2 + 1, 3, 9e9))
@@ -269,11 +254,6 @@ def dog_net_2d(gk_count,
     return pet_ddog_net
 
 
-from pyqae.dnn.layers import gkern_tf
-import tensorflow as tf
-import keras.backend as K
-
-
 def vdog_net_2d(gk_count,
                 dk_count,
                 min_width,
@@ -301,7 +281,7 @@ def vdog_net_2d(gk_count,
     :param train_differences: train the difference matrix
     :param k_dim: manually specify the kernel dimension
     :return:
-    >>> dog_model = vdog_net_2d(3, 2, 0.5, 1.5, k_dim = 5, add_bn_layer = False)
+    >>> dog_model = vdog_net_2d(2, 1, 1.0, 2.0, k_dim = 21, add_bn_layer = False)
     >>> dog_model.summary() #doctest: +NORMALIZE_WHITESPACE
     ____________________________________________________________________________________________________
     Layer (type)                     Output Shape          Param #     Connected to
@@ -310,33 +290,48 @@ def vdog_net_2d(gk_count,
     ____________________________________________________________________________________________________
     XY_VoxDims (InputLayer)          (None, 2)             0
     ____________________________________________________________________________________________________
-    AllGaussianStep (Lambda)         (None, None, None, 3) 0
+    AllGaussianStep (Lambda)         (None, None, None, 2) 0
     ____________________________________________________________________________________________________
-    DifferenceStep (Conv2D)          (None, None, None, 2) 6
+    DifferenceStep (Conv2D)          (None, None, None, 1) 2
     ====================================================================================================
-    Total params: 6.0
-    Trainable params: 6.0
+    Total params: 2.0
+    Trainable params: 2.0
     Non-trainable params: 0.0
     ____________________________________________________________________________________________________
-    >>> in_img = 100*np.expand_dims(np.expand_dims(np.eye(12), 0),-1)
+    >>> in_img = 1*np.expand_dims(np.expand_dims(np.eye(15), 0),-1)
     >>> in_vox = np.array([1.0, 1.0]).reshape((1, 2))
     >>> iv = dog_model.predict([in_img, in_vox])
     >>> iv.shape
-    (1, 12, 12, 2)
-    >>> iv[0,5:-5,5:-5,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
-    array([[7, 4],
-           [4, 7]])
+    (1, 15, 15, 1)
+    >>> pprint(iv[0,5:-5,5:-5,0]) #doctest: +NORMALIZE_WHITESPACE
+    [[ 0.14  0.09 -0.01 -0.05 -0.05]
+     [ 0.09  0.14  0.09 -0.01 -0.05]
+     [-0.01  0.09  0.14  0.09 -0.01]
+     [-0.05 -0.01  0.09  0.14  0.09]
+     [-0.05 -0.05 -0.01  0.09  0.14]]
     >>> from scipy.ndimage import zoom # show the results are resolution indepndent
     >>> in_vox2 = np.array([0.5, 0.5]).reshape((1, 2))
-    >>> in_img2 = zoom(in_img, (1, 2, 2, 1), order = 1)
+    >>> in_img2 = zoom(in_img, (1, 2, 2, 1), order = 2)
     >>> iv2 = dog_model.predict([in_img2, in_vox2])
-    >>> iv2z = zoom(iv2, (1, 0.5, 0.5, 1), order = 1)
-    >>> iv2z[0,5:-5,5:-5,0].astype(int) #doctest: +NORMALIZE_WHITESPACE
-    array([[1, 0],
-           [0, 1]])
-    >>> np.mean(np.abs(iv2z-iv)[:,5:-5, 5:-5], (0, 3))
-    array([[ 6.40511036,  4.54674101],
-           [ 4.54674053,  6.40511036]], dtype=float32)
+    >>> iv2z = zoom(iv2, (1, 0.5, 0.5, 1), order = 2)
+    >>> pprint(iv2z[0,5:-5,5:-5,0]) #doctest: +NORMALIZE_WHITESPACE
+    [[ 0.14  0.08 -0.01 -0.05 -0.05]
+     [ 0.08  0.14  0.08 -0.01 -0.05]
+     [-0.01  0.08  0.14  0.08 -0.01]
+     [-0.05 -0.01  0.08  0.14  0.08]
+     [-0.05 -0.05 -0.01  0.08  0.14]]
+    >>> pprint(np.mean(np.abs(iv2z/iv)[:,5:-5, 5:-5], (0, 3)))
+    [[ 1.    0.97  1.98  1.07  0.98]
+     [ 0.97  1.    0.97  1.98  1.07]
+     [ 1.98  0.97  1.    0.97  1.98]
+     [ 1.07  1.98  0.97  1.    0.97]
+     [ 0.98  1.07  1.98  0.97  1.  ]]
+    >>> pprint(np.mean(np.abs(iv2z-iv)[:,5:-5, 5:-5], (0, 3)))
+    [[ 0.    0.    0.01  0.    0.  ]
+     [ 0.    0.    0.    0.01  0.  ]
+     [ 0.01  0.    0.    0.    0.01]
+     [ 0.    0.01  0.    0.    0.  ]
+     [ 0.    0.    0.01  0.    0.  ]]
     """
     if k_dim is None:
         k_dim = int(np.clip((max_width - 2) * 2 + 1, 3, 9e9))
@@ -378,6 +373,139 @@ def vdog_net_2d(gk_count,
                                name='DifferenceStep{}'.format(suffix),
                                padding='same',
                                activation='linear')(gauss_layer)
+
+    if add_bn_layer:
+        diff_layer = BatchNormalization(
+            name='NormalizeDiffModel{}'.format(suffix))(diff_layer)
+
+    out_model = Model(inputs=[raw_img, vox_size], outputs=[diff_layer])
+    out_model.layers[1].trainable = train_differences
+    return out_model
+
+
+def vdog_net_3d(gk_count,
+                dk_count,
+                min_width,
+                max_width,
+                d_noise=0,
+                input_shape=(None, None, None, 1),
+                static_diff_mat=False,
+                add_bn_layer=True,
+                k_dim=None,
+                train_differences=True,
+                suffix=''):
+    # type: (...) -> keras.models.Model
+    """
+    Create a differentiable Difference of Gaussians network that scales
+    with voxel size for trainable, resolution independent spot-detection
+    :param gk_count: number of filters
+    :param dk_count: number of difference steps
+    :param min_width: minimum filter width
+    :param max_width: maximum filter width
+    :param d_noise: noise to add to the difference layer
+    :param input_shape:
+    :param static_diff_mat:
+    :param add_bn_layer:
+    :param train_filters: train the convolutional kernels
+    :param train_differences: train the difference matrix
+    :param k_dim: manually specify the kernel dimension
+    :return:
+    >>> dog_model = vdog_net_3d(2, 1, 1.0, 2.0, k_dim = 21, add_bn_layer = False)
+    >>> dog_model.summary() #doctest: +NORMALIZE_WHITESPACE
+    ____________________________________________________________________________________________________
+    Layer (type)                     Output Shape          Param #     Connected to
+    ====================================================================================================
+    InputImage (InputLayer)          (None, None, None, No 0
+    ____________________________________________________________________________________________________
+    XYZ_VoxDims (InputLayer)         (None, 3)             0
+    ____________________________________________________________________________________________________
+    AllGaussianStep (Lambda)         (None, None, None, No 0
+    ____________________________________________________________________________________________________
+    DifferenceStep (Conv3D)          (None, None, None, No 2
+    ====================================================================================================
+    Total params: 2.0
+    Trainable params: 2.0
+    Non-trainable params: 0.0
+    ____________________________________________________________________________________________________
+    >>> in_img = np.expand_dims(np.expand_dims(np.expand_dims(np.eye(15), 0),-1), -1)
+    >>> in_vox = np.array([1.0, 1.0, 1.0]).reshape((1, 3))
+    >>> iv = dog_model.predict([in_img, in_vox])
+    >>> iv.shape
+    (1, 15, 15, 1, 1)
+    >>> pprint(iv[0,5:-5,5:-5, 0 ,0]) #doctest: +NORMALIZE_WHITESPACE
+    [[ 0.08  0.06  0.02 -0.   -0.01]
+     [ 0.06  0.08  0.06  0.02 -0.  ]
+     [ 0.02  0.06  0.08  0.06  0.02]
+     [-0.    0.02  0.06  0.08  0.06]
+     [-0.01 -0.    0.02  0.06  0.08]]
+    >>> from scipy.ndimage import zoom # show the results are resolution indepndent
+    >>> in_vox2 = np.array([0.5, 0.5, 1]).reshape((1, 3))
+    >>> in_img2 = zoom(in_img, (1, 2, 2, 1, 1), order = 2)
+    >>> iv2 = dog_model.predict([in_img2, in_vox2])
+    >>> iv2z = zoom(iv2, (1, 0.5, 0.5, 1, 1), order = 2)
+    >>> pprint(iv2z[0,5:-5,5:-5,0,0]) #doctest: +NORMALIZE_WHITESPACE
+    [[ 0.09  0.06  0.02 -0.01 -0.01]
+     [ 0.06  0.09  0.06  0.02 -0.01]
+     [ 0.02  0.06  0.09  0.06  0.02]
+     [-0.01  0.02  0.06  0.09  0.06]
+     [-0.01 -0.01  0.02  0.06  0.09]]
+    >>> pprint(np.mean(np.abs(iv2z/iv)[:,5:-5, 5:-5, 0], (0, 3)))
+    [[ 1.02  1.    0.91  1.33  1.01]
+     [ 1.    1.02  1.    0.91  1.33]
+     [ 0.91  1.    1.02  1.    0.91]
+     [ 1.33  0.91  1.    1.02  1.  ]
+     [ 1.01  1.33  0.91  1.    1.02]]
+    >>> pprint(np.mean(np.abs(iv2z-iv)[:,5:-5, 5:-5, 0], (0, 3)))
+    [[ 0.  0.  0.  0.  0.]
+     [ 0.  0.  0.  0.  0.]
+     [ 0.  0.  0.  0.  0.]
+     [ 0.  0.  0.  0.  0.]
+     [ 0.  0.  0.  0.  0.]]
+    """
+    if k_dim is None:
+        k_dim = int(np.clip((max_width - 2) * 2 + 1, 3, 9e9))
+
+    raw_img = Input(shape=input_shape, name='InputImage{}'.format(suffix))
+    vox_size = Input(shape=(3,), name='XYZ_VoxDims{}'.format(suffix))
+    if static_diff_mat:
+        orig_pad = np.eye(gk_count)[:, 1:]
+        diff_pad = np.zeros((gk_count, gk_count - 1))
+        np.fill_diagonal(diff_pad, -1)
+        d_weights = np.expand_dims(np.expand_dims(orig_pad + diff_pad, 0), 0)
+    else:
+        d_weights = np.expand_dims(
+            np.expand_dims(
+                np.expand_dims(get_diff_mat(gk_count, dk_count, loop=False),
+                               0),
+                0), 0)
+    if d_noise > 0:
+        d_weights = d_weights + np.random.uniform(-d_noise, d_noise,
+                                                  size=d_weights.shape)
+
+    def var_rad_layer(x):
+        in_img, in_vox = x
+
+        tf_weights = tf.expand_dims(
+            tf.stack([gkern_tf(d=3,
+                               kernlen=k_dim,
+                               nsigs=[c_wid / vox_size[0, 0],
+                                      c_wid / vox_size[0, 1],
+                                      c_wid / vox_size[0, 2]])
+                      for c_wid in
+                      np.linspace(min_width, max_width, gk_count)], -1),
+            -2)
+        return K.conv3d(in_img, kernel=tf_weights, padding='same')
+
+    gauss_layer = Lambda(var_rad_layer,
+                         name='AllGaussianStep{}'.format(suffix))(
+        [raw_img, vox_size])
+    diff_layer = Conv3D(d_weights.shape[-1],
+                        kernel_size=(1, 1, 1),
+                        weights=[d_weights],
+                        use_bias=False,
+                        name='DifferenceStep{}'.format(suffix),
+                        padding='same',
+                        activation='linear')(gauss_layer)
 
     if add_bn_layer:
         diff_layer = BatchNormalization(
