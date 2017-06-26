@@ -297,12 +297,12 @@ def phi_coord_tf(r_img, z_rad=0.0, include_r = False):
     >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
     >>> oimg = _setup_and_test(phi_coord_tf, ntimg)[0]
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
-    >>> oimg[:, 0 , 0, 0]
-    array([-0.23227953, -0.        ,  0.        ])
-    >>> oimg[:, 1 , 0, 1]
-    array([-0.,  0.,  0.], dtype=float32)
-    >>> oimg[:, 2 , 0, 2]
-    array([        nan,  0.        , -0.10817345], dtype=float32)
+    >>> pprint(oimg[:, 0 , 0, 0])
+    [-0.23 -0.    0.  ]
+    >>> pprint(oimg[:, 1 , 0, 1])
+    [-0.  0.  0.]
+    >>> pprint(oimg[:, 2 , 0, 2])
+    [  nan  0.   -0.11]
     """
     with tf.variable_scope('phi_coord'):
         (dx_img, dy_img, dz_img) = spatial_gradient_tf(r_img)
@@ -515,6 +515,37 @@ def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
     out_b = np.zeros(out_ch, dtype=np.float32)
     for i_x, o_x in zip(range(in_ch), range(out_ch)):
         out_w[width_x, width_y, i_x, o_x] = 1.0
+    return out_w, out_b
+
+def create_dilated_convolutions_weights_3d(in_ch, out_ch, width_x, width_y,
+                                           width_z):
+    """
+    Create reasonable weights for dilated convolutions so features/structure
+    are preserved and neednt be relearned. In the default settings it makes
+    the layer return exactly what is passed to it. As it learns this gets
+    more complicated
+    :param in_ch:
+    :param out_ch:
+    :param width_x:
+    :param width_y:
+    :param width_z:
+    :return:
+    >>> from keras.models import Sequential
+    >>> from keras.layers import Conv3D
+    >>> t_model = Sequential()
+    >>> cw = create_dilated_convolutions_weights_3d(1, 1, 1, 1, 1)
+    >>> tlay = Conv3D(1, kernel_size = (3,3,3), dilation_rate=(5,5,5), weights = cw, input_shape = (None, None, None, 1), padding = 'same')
+    >>> t_model.add(tlay)
+    >>> out_img = t_model.predict(np.expand_dims(np.expand_dims(_simple_dist_img,-1),-1))
+    >>> np.sum(np.abs(out_img[...,0,0]-_simple_dist_img))
+    0.0
+    """
+    assert in_ch == out_ch, "In and out should match"
+    out_w = np.zeros((2 * width_x + 1, 2 * width_y + 1, 2 * width_y + 1, in_ch, out_ch),
+                     dtype=np.float32)
+    out_b = np.zeros(out_ch, dtype=np.float32)
+    for i_x, o_x in zip(range(in_ch), range(out_ch)):
+        out_w[width_x, width_y, width_z, i_x, o_x] = 1.0
     return out_w, out_b
 
 
