@@ -375,10 +375,11 @@ def obj_to_phi_np(seg_img, z_rad=0):
     c_reg = regionprops((seg_img > 0).astype(int))[0]
     return generate_phi_coord_np(seg_img,
                                  centroid=c_reg.centroid,
+                                 std_xyz = [1,1,1],
                                  zrad=z_rad)
 
 
-def generate_phi_coord_np(seg_img, centroid, z_rad=0):
+def generate_phi_coord_np(seg_img, centroid,std_xyz = [1,1,1], z_rad=0):
     # type: (np.ndarray, Tuple[float, float, float], float) -> np.ndarray
     """
     Create the phi coordinate system
@@ -388,9 +389,9 @@ def generate_phi_coord_np(seg_img, centroid, z_rad=0):
     :return:
     """
     xx, yy, zz = meshgridnd_like(seg_img)
-    r_img = np.sqrt(np.power(xx - centroid[0], 2) +
-                    np.power(yy - centroid[1], 2) +
-                    np.power(zz - centroid[2], 2))
+    r_img = np.sqrt(np.power((xx - centroid[0])/std_xyz[0], 2) +
+                    np.power((yy - centroid[1])/std_xyz[1], 2) +
+                    np.power((zz - centroid[2])/std_xyz[2], 2))
     return phi_coord_np(r_img, z_rad=z_rad)
 
 

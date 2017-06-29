@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from keras import backend as K
+from pyqae.utils import pprint
 import numpy as np
+from functools import reduce
 
 __doc__ = """Custom loss functions for better dealing with unbalanced
 classes and medical segmentation problems"""
@@ -21,11 +23,11 @@ def wdice_coef(weight, flip = False, smooth = 0.5):
     >>> gt_vec = np.expand_dims(np.eye(3),0)
     >>> pred_vec = np.ones((1, 3, 3))
     >>> keval(wdice_coef(1.0)(gt_vec, pred_vec))
-    array([[ 0.52]])
+    [[ 0.52]]
     >>> keval(wdice_coef(weight = 0.1)(gt_vec, pred_vec))
-    array([[ 0.11]])
+    [[ 0.11]]
     >>> keval(wdice_coef(weight = 10)(gt_vec, pred_vec))
-    array([[ 1.53]])
+    [[ 1.53]]
     """
     def cdice_score(y_true, y_pred):
         # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
@@ -41,21 +43,55 @@ def wdice_coef(weight, flip = False, smooth = 0.5):
         return (-1 if flip else 1)*(2. * weight * K.dot(y_true_f, K.transpose(y_pred_f)) + smooth) / ((weight*K.sum(y_true_f)) + K.sum(y_pred_f) + smooth)
     return cdice_score
 
-import os
+def cdice_coef_loss_2d(weights, fp_weight = 1.0, smooth = 0.1):
+    """
+    Create a dice loss coefficient for multiple class segmentation (more
+    than one channel)
+    :param weights:
+    :param fp_weight:
+    :param smooth:
+    :return:
+    >>> keval = _setup_keras_backend(2)
+    >>> gt_vec = np.expand_dims(np.stack([np.eye(3), np.zeros((3,3))],-1), 0)
+    >>> pred_vec = np.ones_like(gt_vec)
+    >>> loss_fun = cdice_coef_loss_2d([1, 1])
+    >>> keval(loss_fun(gt_vec, pred_vec))
+    -0.5151212423939696
+    >>> loss_fun = cdice_coef_loss_2d([1, 0.5])
+    >>> keval(loss_fun(gt_vec, pred_vec))
+    -0.5096267368994641
+    >>> loss_fun = cdice_coef_loss_2d([0.5, 1])
+    >>> keval(loss_fun(gt_vec, pred_vec))
+    -0.26305512669149034
+    """
+    def _temp_func(y_true, y_pred):
+        assert y_pred.shape[3] == len(weights), \
+            "Weight dimension does not match! {} != {}".format(y_pred.shape[3], len(weights))
+        loss_out = []
+        for i, w in enumerate(weights):
+            y_true_f = K.flatten(y_true[:, :, :, i])
+            y_pred_f = K.flatten(y_pred[:, :, :, i])
+            loss_out += [float(w) * (
+            2. * float(fp_weight) * K.sum(y_true_f * y_pred_f) + smooth) / (
+                         float(fp_weight) * K.sum(y_true_f) + K.sum(
+                             y_pred_f) + smooth)]
+
+        return -1 * reduce(lambda a,b: a+b, loss_out)
+    return _temp_func
+
+
 def _setup_keras_backend(dec = None):
     """
     Utility function for setting up Keras with tensorflow correctly
     :param dec: decimal places to keep
     :return:
     """
-
+    import os
     os.environ['keras_backend'] = "tensorflow"
     from keras import backend as K
-    if dec is None:
-        return K.get_session().run
-    else:
-        return lambda x: (K.get_session().run(x)*np.power(10,dec)).astype(
-            int)/np.power(10,dec)
+    return lambda x: pprint(K.get_session().run(x),
+                            p = 2 if dec is None else dec)
+
 
 def wmae_loss(pos_penalty = 1.0, neg_penalty = 1.0):
     """
@@ -64,11 +100,11 @@ def wmae_loss(pos_penalty = 1.0, neg_penalty = 1.0):
     >>> gt_vec = np.zeros((5,))
     >>> pred_vec = np.linspace(-1, 1, 5)
     >>> keval(wmae_loss()(gt_vec, pred_vec))
-    array([ 1.  ,  0.5 ,  0.  ,  0.33,  0.5 ])
+    [ 1.    0.5   0.    0.33  0.5 ]
     >>> keval(wmae_loss(pos_penalty = 0.1)(gt_vec, pred_vec))
-    array([ 1.  ,  0.5 ,  0.  ,  0.03,  0.05])
+    [ 1.    0.5   0.    0.03  0.05]
     >>> keval(wmae_loss(neg_penalty = 0.1)(gt_vec, pred_vec))
-    array([ 1.  ,  0.5 ,  0.  ,  0.83,  0.9 ])
+    [ 1.    0.5   0.    0.83  0.91]
     """
     def wmae(y_true, y_predict):
         diff = y_true-y_predict
