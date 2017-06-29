@@ -3,7 +3,7 @@ import tensorflow as tf
 from skimage.measure import regionprops
 
 from pyqae.nd import meshgridnd_like
-from pyqae.utils import pprint
+from pyqae.utils import pprint # noinspection PyUnresolvedReferences
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -161,7 +161,8 @@ def add_com_grid_tf(in_layer,
     """
     Adds spatial grids to images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
-    summing the input layer across the channels
+    summing the input layer across the channels.
+    It also normalizes the grid by using the weighted standard deviation
 
     :param in_layer:
     :param layer_concat:
@@ -171,18 +172,18 @@ def add_com_grid_tf(in_layer,
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 3)
     >>> out_img.shape
     (5, 4, 3, 2, 3)
-    >>> out_img[0, :, 0, 0, 0]
-    array([-1.        , -0.33333334,  0.33333334,  1.        ], dtype=float32)
-    >>> out_img[0, 0, :, 0, 1]
-    array([-1.,  0.,  1.], dtype=float32)
-    >>> out_img[0, 0, 0, :, 2]
-    array([-1.,  1.], dtype=float32)
+    >>> pprint(out_img[0, :, 0, 0, 0])
+    [-1.34 -0.45  0.45  1.34]
+    >>> pprint(out_img[0, 0, :, 0, 1])
+    [-1.22  0.    1.22]
+    >>> pprint(out_img[0, 0, 0, :, 2])
+    [-1.  1.]
     >>> out_img = _setup_and_test(lambda x: add_com_grid_tf(x, as_r_vec=True), _testimg)
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 1)
     >>> out_img.shape
     (5, 4, 3, 2, 1)
-    >>> out_img[0, :, 0, 0, 0]
-    array([ 1.73205078,  1.45296621,  1.45296621,  1.73205078], dtype=float32)
+    >>> pprint(out_img[0, :, 0, 0, 0])
+    [ 2.07  1.64  1.64  2.07]
     """
     with tf.variable_scope('com_grid_op'):
         with tf.variable_scope('initialize'):
@@ -206,6 +207,12 @@ def add_com_grid_tf(in_layer,
             sm_list = [
                 tf.reduce_sum(c_var * mask_sum, [1, 2, 3]) * 1 / tf.reduce_sum(
                     mask_sum, [1, 2, 3]) for c_var in svar_list]
+            # wstd is np.sqrt(np.sum(w_y*np.square(t_x))/np.sum(w_y)-np.square(np.sum(w_y*t_x)/np.sum(w_y)))
+            sd_list = [
+                tf.sqrt(tf.reduce_sum(mask_sum * tf.square(c_var), [1, 2, 3]) /
+                tf.reduce_sum(mask_sum, [1, 2, 3]) - tf.square(m_var))
+                for m_var, c_var in zip(sm_list, svar_list)
+            ]
             expand_op = lambda iv: tf.expand_dims(
                 tf.expand_dims(tf.expand_dims(tf.expand_dims(iv, -1), -1), -1),
                 -1)
@@ -213,11 +220,13 @@ def add_com_grid_tf(in_layer,
             res_op = lambda iv: tile_op(expand_op(iv))
 
             sm_matlist = [res_op(c_var) for c_var in sm_list]
+            sd_matlist = [res_op(c_var) for c_var in sd_list]
 
         with tf.variable_scope('make_grid'):
-            out_var = [tf.reshape(c_var, (
-                batch_size, xg_wid, yg_wid, zg_wid, 1)) - c_sm
-                       for c_var, c_sm in zip(svar_list, sm_matlist)]
+            out_var = [(tf.reshape(c_var, (
+                batch_size, xg_wid, yg_wid, zg_wid, 1)) - c_sm)/c_sd
+                       for c_var, c_sm, c_sd in zip(svar_list, sm_matlist,
+                                              sd_matlist)]
 
             xy_vec = tf.concat(out_var, -1)
             if as_r_vec:
@@ -339,12 +348,12 @@ def add_com_phi_grid_tf(in_layer,
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 3)
     >>> out_img.shape
     (5, 4, 3, 2, 3)
-    >>> out_img[0, :, 0, 0, 0]
-    array([-0.22936395, -0.19433206,  0.19433206,  0.22936395], dtype=float32)
-    >>> out_img[0, 0, :, 0, 1]
-    array([-0.27063605,  0.        ,  0.27063605], dtype=float32)
-    >>> out_img[0, 0, 0, :, 2]
-    array([ 0.,  0.], dtype=float32)
+    >>> pprint(out_img[0, :, 0, 0, 0])
+    [-0.26 -0.21  0.21  0.26]
+    >>> pprint(out_img[0, 0, :, 0, 1])
+    [-0.24  0.    0.24]
+    >>> pprint(out_img[0, 0, 0, :, 2])
+    [ 0.  0.]
     """
     with tf.variable_scope('add_com_phi_grid'):
         r_vec = add_com_grid_tf(in_layer, layer_concat=False, as_r_vec=True)

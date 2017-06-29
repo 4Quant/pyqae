@@ -13,7 +13,7 @@ from keras.models import Sequential
 from pyqae.dnn.layers import add_com_phi_grid_tf
 from pyqae.dnn.layers import gkern_nd
 from pyqae.dnn.layers import gkern_tf
-from pyqae.utils import pprint
+from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 
 __doc__ = """
 A set of neural networks used to generate relevant features for further
@@ -115,6 +115,52 @@ def mask_net_3d(ishape,
     return out_model
 
 
+from keras.layers import GlobalAveragePooling2D
+
+
+def GlobalSpreadAverage2D(suffix):
+    """
+    A global average pooling that is then spread as the same value across
+    all pixels
+    :param suffix:
+    :return:
+    >>> from keras.models import Sequential
+    >>> in_node = Input(shape = (4, 4, 3))
+    >>> n_node = GlobalSpreadAverage2D(suffix='_GSA')(in_node)
+    >>> t_model = Model(inputs = [in_node], outputs = [n_node])
+    >>> t_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    input_1 (InputLayer)         (None, 4, 4, 3)           0
+    _________________________________________________________________
+    GAP_GSA (GlobalAveragePoolin (None, 3)                 0
+    _________________________________________________________________
+    DeepMiddle_GSA (Lambda)      (None, 4, 4, 6)           0
+    =================================================================
+    Total params: 0.0
+    Trainable params: 0.0
+    Non-trainable params: 0.0
+    _________________________________________________________________
+    """
+
+    def _deep_middle(in_block):
+        in_gap, in_tensor = in_block
+        in_gap = tf.expand_dims(tf.expand_dims(in_gap, 1), 1)
+        ga_wid = tf.shape(in_gap)[3]
+        x_wid, y_wid = tf.shape(in_tensor)[1], tf.shape(in_tensor)[2]
+        tile_mid = tf.tile(in_gap, (1, x_wid, y_wid, 1))
+        return tf.concat([in_tensor, tile_mid], -1)
+
+    def _layer_code(in_tensor):
+        ga_layer = GlobalAveragePooling2D(name="GAP{}".format(suffix))(
+            in_tensor)
+        return Lambda(_deep_middle, name='DeepMiddle{}'.format(suffix))(
+            [ga_layer, in_tensor])
+
+    return _layer_code
+
+
 def PhiComGrid3DLayer(z_rad, include_r, **args):
     """
     A PhiComGrid layer based on the add_com_phi_grid_tf function which take
@@ -125,7 +171,7 @@ def PhiComGrid3DLayer(z_rad, include_r, **args):
     :return:
     >>> from keras.models import Sequential
     >>> t_model = Sequential()
-    >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, input_shape=(None, None, None, 1), name='PhiGrid'))
+    >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, input_shape=(None, None, None, 1), name='PhiGrid', include_r = False))
     >>> t_model.summary() # doctest: +NORMALIZE_WHITESPACE
     _________________________________________________________________
     Layer (type)                 Output Shape              Param #
@@ -139,14 +185,14 @@ def PhiComGrid3DLayer(z_rad, include_r, **args):
     >>> out_res = t_model.predict(np.ones((1, 3, 3, 3, 1)))
     >>> out_res.shape
     (1, 3, 3, 3, 3)
-    >>> out_res[0,:,0,0,0]
-    array([-0.19591327,  0.        ,  0.19591327], dtype=float32)
-    >>> out_res[0,:,0,0,1]
-    array([-0.19591327, -0.25      , -0.19591327], dtype=float32)
+    >>> pprint(out_res[0,:,0,0,0])
+    [-0.2  0.   0.2]
+    >>> pprint(out_res[0,:,0,0,1])
+    [-0.2  -0.25 -0.2 ]
     """
     return Lambda(lambda x: add_com_phi_grid_tf(x,
                                                 z_rad=z_rad,
-                                                include_r = include_r),
+                                                include_r=include_r),
                   **args)
 
 
@@ -262,7 +308,8 @@ def vdog_net_2d(gk_count,
                 min_width,
                 max_width,
                 d_noise=0,
-                input_shape=(None, None, 1), # type: Tuple[Optional[int], Optional[int], int]
+                input_shape=(None, None, 1),
+                # type: Tuple[Optional[int], Optional[int], int]
                 static_diff_mat=False,
                 add_bn_layer=True,
                 k_dim=None,
@@ -386,15 +433,16 @@ def vdog_net_2d(gk_count,
     return out_model
 
 
-def vdog_net_3d(gk_count, # type: int
-                dk_count, # type: int
-                min_width, # type: float
-                max_width, # type: float
-                d_noise=0, # type: float
-                input_shape=(None, None, None, 1), # type: Tuple[Optional[int], Optional[int], Optional[int], int]
+def vdog_net_3d(gk_count,  # type: int
+                dk_count,  # type: int
+                min_width,  # type: float
+                max_width,  # type: float
+                d_noise=0,  # type: float
+                input_shape=(None, None, None, 1),
+                # type: Tuple[Optional[int], Optional[int], Optional[int], int]
                 static_diff_mat=False,
                 add_bn_layer=True,
-                k_dim=None, # type: Optional[int]
+                k_dim=None,  # type: Optional[int]
                 train_differences=True,
                 suffix=''):
     # type: (...) -> keras.models.Model
