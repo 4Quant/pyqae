@@ -161,7 +161,10 @@ def GlobalSpreadAverage2D(suffix):
     return _layer_code
 
 
-def PhiComGrid3DLayer(z_rad, include_r, **args):
+def PhiComGrid3DLayer(z_rad,
+                      include_r,
+                      include_ir=False,
+                      **args):
     """
     A PhiComGrid layer based on the add_com_phi_grid_tf function which take
     the center of mass of the object in 3D and creates a arcsin map for the
@@ -171,7 +174,7 @@ def PhiComGrid3DLayer(z_rad, include_r, **args):
     :return:
     >>> from keras.models import Sequential
     >>> t_model = Sequential()
-    >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, input_shape=(None, None, None, 1), name='PhiGrid', include_r = False))
+    >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, include_r = True, include_ir = True, input_shape=(None, None, None, 1), name='PhiGrid'))
     >>> t_model.summary() # doctest: +NORMALIZE_WHITESPACE
     _________________________________________________________________
     Layer (type)                 Output Shape              Param #
@@ -184,15 +187,22 @@ def PhiComGrid3DLayer(z_rad, include_r, **args):
     _________________________________________________________________
     >>> out_res = t_model.predict(np.ones((1, 3, 3, 3, 1)))
     >>> out_res.shape
-    (1, 3, 3, 3, 3)
+    (1, 3, 3, 3, 5)
     >>> pprint(out_res[0,:,0,0,0])
-    [-0.2  0.   0.2]
+    [ 2.12  1.73  2.12]
     >>> pprint(out_res[0,:,0,0,1])
+    [ 0.45  0.55  0.45]
+    >>> pprint(out_res[0,:,0,0,2])
+    [-0.2  0.   0.2]
+    >>> pprint(out_res[0,:,0,0,3])
+    [-0.2  -0.25 -0.2 ]
+    >>> pprint(out_res[0,:,0,0,4])
     [-0.2  -0.25 -0.2 ]
     """
     return Lambda(lambda x: add_com_phi_grid_tf(x,
                                                 z_rad=z_rad,
-                                                include_r=include_r),
+                                                include_r=include_r,
+                                                include_ir=include_ir),
                   **args)
 
 

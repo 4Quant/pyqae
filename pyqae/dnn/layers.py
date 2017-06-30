@@ -3,7 +3,7 @@ import tensorflow as tf
 from skimage.measure import regionprops
 
 from pyqae.nd import meshgridnd_like
-from pyqae.utils import pprint # noinspection PyUnresolvedReferences
+from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -11,7 +11,7 @@ allowing meaningful spatial and medical information to be included in images
 """
 
 
-def _setup_and_test(in_func, *in_arrs, is_list=False, round = False):
+def _setup_and_test(in_func, *in_arrs, is_list=False, round=False):
     """
     For setting up a simple graph and testing it
     :param in_func:
@@ -37,12 +37,11 @@ def _setup_and_test(in_func, *in_arrs, is_list=False, round = False):
         if is_list:
             o_val = sess_out
         else:
-            o_val =  sess_out[0]
+            o_val = sess_out[0]
         if round:
-            return (np.array(o_val)*100).astype(int)/100
+            return (np.array(o_val) * 100).astype(int) / 100
         else:
             return o_val
-
 
 
 _simple_dist_img = np.stack([np.eye(3), 0.5 * np.ones((3, 3))], -1)
@@ -210,7 +209,7 @@ def add_com_grid_tf(in_layer,
             # wstd is np.sqrt(np.sum(w_y*np.square(t_x))/np.sum(w_y)-np.square(np.sum(w_y*t_x)/np.sum(w_y)))
             sd_list = [
                 tf.sqrt(tf.reduce_sum(mask_sum * tf.square(c_var), [1, 2, 3]) /
-                tf.reduce_sum(mask_sum, [1, 2, 3]) - tf.square(m_var))
+                        tf.reduce_sum(mask_sum, [1, 2, 3]) - tf.square(m_var))
                 for m_var, c_var in zip(sm_list, svar_list)
             ]
             expand_op = lambda iv: tf.expand_dims(
@@ -224,9 +223,9 @@ def add_com_grid_tf(in_layer,
 
         with tf.variable_scope('make_grid'):
             out_var = [(tf.reshape(c_var, (
-                batch_size, xg_wid, yg_wid, zg_wid, 1)) - c_sm)/c_sd
+                batch_size, xg_wid, yg_wid, zg_wid, 1)) - c_sm) / c_sd
                        for c_var, c_sm, c_sd in zip(svar_list, sm_matlist,
-                                              sd_matlist)]
+                                                    sd_matlist)]
 
             xy_vec = tf.concat(out_var, -1)
             if as_r_vec:
@@ -285,13 +284,18 @@ def spatial_gradient_tf(in_img):
         return (0.5 * dx_img, 0.5 * dy_img, 0.5 * dz_img)
 
 
-def phi_coord_tf(r_img, z_rad=0.0, include_r = False):
-    # type: (tf.Tensor, float, bool) -> tf.Tensor
+def phi_coord_tf(r_img, z_rad=0.0,
+                 include_r=False,
+                 include_ir=False,
+                 ir_smooth=1e-1):
+    # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
     derivatives and arc-sin to create smooth functions
     :param r_img:
     :param z_rad:
+    :param include_r: include the r axis
+    :param include_ir: include the inverted r_axis (+1e-1)
     :return:
     >>> _testimg = np.ones((4, 3, 2))
     >>> from scipy.ndimage.morphology import distance_transform_edt
@@ -312,6 +316,15 @@ def phi_coord_tf(r_img, z_rad=0.0, include_r = False):
     [-0.  0.  0.]
     >>> pprint(oimg[:, 2 , 0, 2])
     [  nan  0.   -0.11]
+    >>> ffunc = lambda x: phi_coord_tf(x, 0, True, True)
+    >>> oimg = _setup_and_test(ffunc, ntimg)[0]
+    setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 5)
+    >>> pprint(oimg[:, 0 , 0, 0])
+    [ 1.  0.  0.]
+    >>> pprint(oimg[:, 1 , 0, 1])
+    [ 10.     0.91  10.  ]
+    >>> pprint(oimg[:, 2 , 0, 2])
+    [ 0.    0.    0.23]
     """
     with tf.variable_scope('phi_coord'):
         (dx_img, dy_img, dz_img) = spatial_gradient_tf(r_img)
@@ -322,6 +335,8 @@ def phi_coord_tf(r_img, z_rad=0.0, include_r = False):
         dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
         dphi_c_img = (tf.asin(dz_img / dr_img)) / np.pi * mask_img
         out_vec = [dphi_a_img, dphi_b_img, dphi_c_img]
+        if include_ir:
+            out_vec = [1 / (ir_smooth + r_img)] + out_vec
         if include_r:
             out_vec = [r_img] + out_vec
         return tf.concat(out_vec, -1)
@@ -330,9 +345,10 @@ def phi_coord_tf(r_img, z_rad=0.0, include_r = False):
 def add_com_phi_grid_tf(in_layer,
                         layer_concat=False,
                         z_rad=0.0,
-                        include_r = False
+                        include_r=False,
+                        include_ir = False
                         ):
-    # type: (tf.Tensor, bool, float, bool) -> tf.Tensor
+    # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
     """
     Adds spatial phi grids to images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
@@ -357,7 +373,8 @@ def add_com_phi_grid_tf(in_layer,
     """
     with tf.variable_scope('add_com_phi_grid'):
         r_vec = add_com_grid_tf(in_layer, layer_concat=False, as_r_vec=True)
-        phi_out = phi_coord_tf(r_vec, z_rad=z_rad, include_r = include_r)
+        phi_out = phi_coord_tf(r_vec, z_rad=z_rad, include_r=include_r,
+                               include_ir = include_ir)
         if layer_concat:
             return tf.concat([in_layer, phi_out], -1)
         else:
@@ -375,11 +392,11 @@ def obj_to_phi_np(seg_img, z_rad=0):
     c_reg = regionprops((seg_img > 0).astype(int))[0]
     return generate_phi_coord_np(seg_img,
                                  centroid=c_reg.centroid,
-                                 std_xyz = [1,1,1],
+                                 std_xyz=[1, 1, 1],
                                  zrad=z_rad)
 
 
-def generate_phi_coord_np(seg_img, centroid,std_xyz = [1,1,1], z_rad=0):
+def generate_phi_coord_np(seg_img, centroid, std_xyz=[1, 1, 1], z_rad=0):
     # type: (np.ndarray, Tuple[float, float, float], float) -> np.ndarray
     """
     Create the phi coordinate system
@@ -389,9 +406,9 @@ def generate_phi_coord_np(seg_img, centroid,std_xyz = [1,1,1], z_rad=0):
     :return:
     """
     xx, yy, zz = meshgridnd_like(seg_img)
-    r_img = np.sqrt(np.power((xx - centroid[0])/std_xyz[0], 2) +
-                    np.power((yy - centroid[1])/std_xyz[1], 2) +
-                    np.power((zz - centroid[2])/std_xyz[2], 2))
+    r_img = np.sqrt(np.power((xx - centroid[0]) / std_xyz[0], 2) +
+                    np.power((yy - centroid[1]) / std_xyz[1], 2) +
+                    np.power((zz - centroid[2]) / std_xyz[2], 2))
     return phi_coord_np(r_img, z_rad=z_rad)
 
 
@@ -527,6 +544,7 @@ def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
         out_w[width_x, width_y, i_x, o_x] = 1.0
     return out_w, out_b
 
+
 def create_dilated_convolutions_weights_3d(in_ch, out_ch, width_x, width_y,
                                            width_z):
     """
@@ -551,7 +569,8 @@ def create_dilated_convolutions_weights_3d(in_ch, out_ch, width_x, width_y,
     0.0
     """
     assert in_ch == out_ch, "In and out should match"
-    out_w = np.zeros((2 * width_x + 1, 2 * width_y + 1, 2 * width_y + 1, in_ch, out_ch),
+    out_w = np.zeros((2 * width_x + 1, 2 * width_y + 1, 2 * width_z + 1,
+                      in_ch, out_ch),
                      dtype=np.float32)
     out_b = np.zeros(out_ch, dtype=np.float32)
     for i_x, o_x in zip(range(in_ch), range(out_ch)):
@@ -560,6 +579,7 @@ def create_dilated_convolutions_weights_3d(in_ch, out_ch, width_x, width_y,
 
 
 from functools import reduce
+
 
 def gkern_nd(d=2, kernlen=21, nsigs=3, min_smooth_val=1e-2):
     """
@@ -602,13 +622,14 @@ def gkern_nd(d=2, kernlen=21, nsigs=3, min_smooth_val=1e-2):
     all_axs = [np.linspace(-k_wid, k_wid, kernlen)] * d
     all_xxs = np.meshgrid(*all_axs)
     all_dist = reduce(np.add, [
-        np.square(cur_xx) / (2*np.square(np.clip(nsig, min_smooth_val,
-                                                kernlen)))
+        np.square(cur_xx) / (2 * np.square(np.clip(nsig, min_smooth_val,
+                                                   kernlen)))
         for cur_xx, nsig in zip(all_xxs, nsigs)])
     kernel_raw = np.exp(-all_dist)
     return kernel_raw / kernel_raw.sum()
 
-def gkern_tf(d=2, kernlen=21, nsigs=3, norm = True):
+
+def gkern_tf(d=2, kernlen=21, nsigs=3, norm=True):
     # type: (...) -> tf.Tensor
     """
     Create n-d gaussian kernels as tensors
@@ -647,7 +668,7 @@ def gkern_tf(d=2, kernlen=21, nsigs=3, norm = True):
                 nsigs, d)
         else:
             nsigs = [nsigs] * d
-        k_wid = (kernlen-1)/2
+        k_wid = (kernlen - 1) / 2
         all_axs = [tf.linspace(-k_wid, k_wid, kernlen)] * d
         all_xxs = tf.meshgrid(*all_axs, indexing='ij')
         all_dist = reduce(tf.add, [tf.square(cur_xx) / (2 * np.square(nsig))
