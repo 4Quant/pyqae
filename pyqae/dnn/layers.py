@@ -152,7 +152,7 @@ def add_simple_grid_tf(in_layer,  # type: tf.Tensor
         return tf.concat([in_layer, txy_vec], -1)
 
 
-def add_com_grid_tf(in_layer,
+def add_com_grid_3d_tf(in_layer,
                     layer_concat=False,
                     as_r_vec=False
                     ):
@@ -167,7 +167,7 @@ def add_com_grid_tf(in_layer,
     :param layer_concat:
     :return:
     >>> _testimg = np.ones((5, 4, 3, 2, 1))
-    >>> out_img = _setup_and_test(add_com_grid_tf, _testimg)
+    >>> out_img = _setup_and_test(add_com_grid_3d_tf, _testimg)
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 3)
     >>> out_img.shape
     (5, 4, 3, 2, 3)
@@ -177,7 +177,7 @@ def add_com_grid_tf(in_layer,
     [-1.22  0.    1.22]
     >>> pprint(out_img[0, 0, 0, :, 2])
     [-1.  1.]
-    >>> out_img = _setup_and_test(lambda x: add_com_grid_tf(x, as_r_vec=True), _testimg)
+    >>> out_img = _setup_and_test(lambda x: add_com_grid_3d_tf(x, as_r_vec=True), _testimg)
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 1)
     >>> out_img.shape
     (5, 4, 3, 2, 1)
@@ -404,10 +404,10 @@ def spatial_gradient_2d_tf(in_img):
         return (0.5 * dx_img, 0.5 * dy_img)
 
 
-def phi_coord_tf(r_img, z_rad=0.0,
+def phi_coord_3d_tf(r_img, z_rad=0.0,
                  include_r=False,
                  include_ir=False,
-                 ir_smooth=1e-1):
+                 ir_smooth=1e-2):
     # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
@@ -421,39 +421,41 @@ def phi_coord_tf(r_img, z_rad=0.0,
     >>> from scipy.ndimage.morphology import distance_transform_edt
     >>> _testimg = distance_transform_edt(_testimg)
     >>> _testimg = np.expand_dims(np.expand_dims(_testimg,0),-1)
-    >>> out_img = _setup_and_test(phi_coord_tf, _testimg)
+    >>> out_img = _setup_and_test(phi_coord_3d_tf, _testimg)
     setup_net [(1, 4, 3, 2, 1)] (1, 4, 3, 2, 3)
     >>> out_img.shape
     (1, 4, 3, 2, 3)
     >>> pprint(out_img[0, :, 0, 0, 0])
     [ 0.33  0.45  0.46  0.45]
     >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
-    >>> oimg = _setup_and_test(phi_coord_tf, ntimg)[0]
+    >>> oimg = _setup_and_test(phi_coord_3d_tf, ntimg)[0]
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
     >>> pprint(oimg[:, 0 , 0, 0])
     [-0.23 -0.    0.  ]
     >>> pprint(oimg[:, 1 , 0, 1])
     [-0.  0.  0.]
     >>> pprint(oimg[:, 2 , 0, 2])
-    [  nan  0.   -0.11]
-    >>> ffunc = lambda x: phi_coord_tf(x, 0, True, True)
+    [ 0.    0.   -0.11]
+    >>> ffunc = lambda x: phi_coord_3d_tf(x, 0, True, True)
     >>> oimg = _setup_and_test(ffunc, ntimg)[0]
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 5)
     >>> pprint(oimg[:, 0 , 0, 0])
     [ 1.  0.  0.]
     >>> pprint(oimg[:, 1 , 0, 1])
-    [ 10.     0.91  10.  ]
+    [ 100.      0.99  100.  ]
     >>> pprint(oimg[:, 2 , 0, 2])
     [ 0.    0.    0.23]
     """
-    with tf.variable_scope('phi_coord'):
+    with tf.variable_scope('phi_coord_3d'):
         (dx_img, dy_img, dz_img) = spatial_gradient_tf(r_img)
         dr_img = tf.sqrt(
             tf.square(dx_img) + tf.square(dy_img) + tf.square(dz_img))
+        dr_img = tf.clip_by_value(dr_img, ir_smooth, tf.float32.max)
         mask_img = tf.cast(r_img > z_rad, tf.float32)
-        dphi_a_img = tf.asin(dx_img / dr_img) / np.pi * mask_img
-        dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
-        dphi_c_img = (tf.asin(dz_img / dr_img)) / np.pi * mask_img
+        safe_asin = lambda x: tf.asin(tf.clip_by_value(x, -1, 1))
+        dphi_a_img = safe_asin(dx_img / dr_img) / np.pi * mask_img
+        dphi_b_img = (safe_asin(dy_img / dr_img)) / np.pi * mask_img
+        dphi_c_img = (safe_asin(dz_img / dr_img)) / np.pi * mask_img
         out_vec = [dphi_a_img, dphi_b_img, dphi_c_img]
         if include_ir:
             out_vec = [1 / (ir_smooth + r_img)] + out_vec
@@ -466,7 +468,7 @@ def phi_coord_2d_tf(r_img,
                     z_rad=0.0,
                     include_r=False,
                     include_ir=False,
-                    ir_smooth=1e-1):
+                    ir_smooth=1e-2):
     # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
@@ -490,26 +492,28 @@ def phi_coord_2d_tf(r_img,
     >>> oimg = _setup_and_test(phi_coord_2d_tf, ntimg)[0]
     setup_net [(1, 3, 3, 1)] (1, 3, 3, 2)
     >>> pprint(oimg[:, 0 , 0])
-    [-0.25 -0.     nan]
+    [-0.25 -0.    0.  ]
     >>> pprint(oimg[:, 1 , 1])
-    [ -0.  nan   0.]
+    [-0.  0.  0.]
     >>> ffunc = lambda x: phi_coord_2d_tf(x, 0, True, True)
     >>> oimg = _setup_and_test(ffunc, ntimg)[0]
     setup_net [(1, 3, 3, 1)] (1, 3, 3, 4)
     >>> pprint(oimg[:, 0 , 0])
     [ 1.  0.  0.]
     >>> pprint(oimg[:, 1 , 1])
-    [ 10.     0.91  10.  ]
+    [ 100.      0.99  100.  ]
     >>> pprint(oimg[:, 2 , 2])
-    [  nan  0.    0.25]
+    [ 0.    0.    0.25]
     """
     with tf.variable_scope('phi_coord_2d'):
         (dx_img, dy_img) = spatial_gradient_2d_tf(r_img)
         dr_img = tf.sqrt(
             tf.square(dx_img) + tf.square(dy_img))
+        dr_img = tf.clip_by_value(dr_img, ir_smooth, tf.float32.max)
         mask_img = tf.cast(r_img > z_rad, tf.float32)
-        dphi_a_img = tf.asin(dx_img / dr_img) / np.pi * mask_img
-        dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
+        safe_asin = lambda x: tf.asin(tf.clip_by_value(x, -1, 1))
+        dphi_a_img = safe_asin(dx_img / dr_img) / np.pi * mask_img
+        dphi_b_img = safe_asin(dy_img / dr_img) / np.pi * mask_img
         out_vec = [dphi_a_img, dphi_b_img]
         if include_ir:
             out_vec = [1 / (ir_smooth + r_img)] + out_vec
@@ -548,8 +552,8 @@ def add_com_phi_grid_3d_tf(in_layer,
     [ 0.  0.]
     """
     with tf.variable_scope('add_com_phi_grid_3d'):
-        r_vec = add_com_grid_tf(in_layer, layer_concat=False, as_r_vec=True)
-        phi_out = phi_coord_tf(r_vec, z_rad=z_rad, include_r=include_r,
+        r_vec = add_com_grid_3d_tf(in_layer, layer_concat=False, as_r_vec=True)
+        phi_out = phi_coord_3d_tf(r_vec, z_rad=z_rad, include_r=include_r,
                                include_ir=include_ir)
         if layer_concat:
             return tf.concat([in_layer, phi_out], -1)
@@ -580,7 +584,7 @@ def add_com_phi_grid_2d_tf(in_layer,
     >>> out_img.shape
     (4, 3, 2, 2)
     >>> pprint(out_img[0, :, 0, 0])
-    [-0.5  nan  0.5]
+    [-0.5  0.   0.5]
     >>> pprint(out_img[0, 0, :, 1])
     [ 0.  0.]
     """
@@ -672,34 +676,34 @@ def __compare_numpy_and_tf():
             -4.80634556e-08])
     >>> oimg_np = phi_coord_np(_simple_dist_img,0)
     >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
-    >>> oimg_tf = _setup_and_test(phi_coord_tf, ntimg)
+    >>> oimg_tf = _setup_and_test(phi_coord_3d_tf, ntimg)
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
     >>> pprint(np.abs(oimg_tf[0]-oimg_np)/(np.abs(oimg_np)+.1))
     [[[[  8.07e-08   8.07e-08   5.67e-08]
-       [  0.00e+00   0.00e+00        nan]]
+       [  0.00e+00   0.00e+00   4.97e-08]]
     <BLANKLINE>
       [[  0.00e+00   0.00e+00   0.00e+00]
-       [  0.00e+00   0.00e+00        nan]]
+       [  0.00e+00   0.00e+00   4.97e-08]]
     <BLANKLINE>
-      [[  0.00e+00   0.00e+00        nan]
-       [  0.00e+00   0.00e+00        nan]]]
+      [[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00   4.97e-08]]]
     <BLANKLINE>
     <BLANKLINE>
      [[[  0.00e+00   0.00e+00   0.00e+00]
-       [  0.00e+00   0.00e+00        nan]]
+       [  0.00e+00   0.00e+00   4.97e-08]]
     <BLANKLINE>
-      [[  0.00e+00   0.00e+00        nan]
-       [  0.00e+00   0.00e+00        nan]]
-    <BLANKLINE>
-      [[  0.00e+00   0.00e+00   0.00e+00]
-       [  0.00e+00   0.00e+00        nan]]]
-    <BLANKLINE>
-    <BLANKLINE>
-     [[[  0.00e+00   0.00e+00        nan]
-       [  0.00e+00   0.00e+00        nan]]
+      [[  0.00e+00   0.00e+00   4.97e-08]
+       [  0.00e+00   0.00e+00   4.97e-08]]
     <BLANKLINE>
       [[  0.00e+00   0.00e+00   0.00e+00]
-       [  0.00e+00   0.00e+00        nan]]
+       [  0.00e+00   0.00e+00   4.97e-08]]]
+    <BLANKLINE>
+    <BLANKLINE>
+     [[[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00   4.97e-08]]
+    <BLANKLINE>
+      [[  0.00e+00   0.00e+00   0.00e+00]
+       [  0.00e+00   0.00e+00   4.97e-08]]
     <BLANKLINE>
       [[  9.00e-09   9.00e-09   2.09e-08]
        [  0.00e+00   0.00e+00   4.97e-08]]]]
@@ -728,7 +732,7 @@ def __compare_numpy_and_tf():
     pass
 
 
-def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
+def create_dilated_convolutions_weights_2d(in_ch, out_ch, width_x, width_y):
     """
     Create reasonable weights for dilated convolutions so features/structure
     are preserved and neednt be relearned. In the default settings it makes
@@ -742,7 +746,7 @@ def create_dilated_convolutions_weights(in_ch, out_ch, width_x, width_y):
     >>> from keras.models import Sequential
     >>> from keras.layers import Conv2D
     >>> t_model = Sequential()
-    >>> cw = create_dilated_convolutions_weights(1, 1, 1, 1)
+    >>> cw = create_dilated_convolutions_weights_2d(1, 1, 1, 1)
     >>> tlay = Conv2D(1, kernel_size = (3,3), dilation_rate=(5,5), weights = cw, input_shape = (None, None, 1), padding = 'same')
     >>> t_model.add(tlay)
     >>> out_img = t_model.predict(np.expand_dims(_simple_dist_img,-1))
