@@ -10,7 +10,8 @@ from keras.layers import Lambda
 from keras.models import Model
 from keras.models import Sequential
 
-from pyqae.dnn.layers import add_com_phi_grid_tf
+from pyqae.dnn.layers import add_com_phi_grid_2d_tf
+from pyqae.dnn.layers import add_com_phi_grid_3d_tf
 from pyqae.dnn.layers import gkern_nd
 from pyqae.dnn.layers import gkern_tf
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
@@ -166,7 +167,7 @@ def PhiComGrid3DLayer(z_rad,
                       include_ir=False,
                       **args):
     """
-    A PhiComGrid layer based on the add_com_phi_grid_tf function which take
+    A PhiComGrid layer based on the add_com_phi_grid_3d_tf function which take
     the center of mass of the object in 3D and creates a arcsin map for the
     3 coordinates
     :param z_rad: the radius near the middle to black out (force 0)
@@ -199,10 +200,53 @@ def PhiComGrid3DLayer(z_rad,
     >>> pprint(out_res[0,:,0,0,4])
     [-0.2  -0.25 -0.2 ]
     """
-    return Lambda(lambda x: add_com_phi_grid_tf(x,
-                                                z_rad=z_rad,
-                                                include_r=include_r,
-                                                include_ir=include_ir),
+    return Lambda(lambda x: add_com_phi_grid_3d_tf(x,
+                                                   z_rad=z_rad,
+                                                   include_r=include_r,
+                                                   include_ir=include_ir),
+                  **args)
+
+
+def PhiComGrid2DLayer(z_rad,
+                      include_r,
+                      include_ir=False,
+                      **args):
+    """
+    A PhiComGrid layer based on the add_com_phi_grid_2d_tf function which take
+    the center of mass of the object in 2D and creates a arcsin map for the
+    3 coordinates
+    :param z_rad: the radius near the middle to black out (force 0)
+    :param args:
+    :return:
+    >>> from keras.models import Sequential
+    >>> t_model = Sequential()
+    >>> t_model.add(PhiComGrid2DLayer(z_rad=0.0, include_r = True, include_ir = True, input_shape=(None, None, 1), name='PhiGrid'))
+    >>> t_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    PhiGrid (Lambda)             (None, None, None, 4)     0
+    =================================================================
+    Total params: 0.0
+    Trainable params: 0.0
+    Non-trainable params: 0.0
+    _________________________________________________________________
+    >>> out_res = t_model.predict(np.ones((1, 3, 3, 1)))
+    >>> out_res.shape
+    (1, 3, 3, 4)
+    >>> pprint(out_res[0,:,0,0])
+    [ 1.73  1.22  1.73]
+    >>> pprint(out_res[0,:,0,1])
+    [ 0.55  0.75  0.55]
+    >>> pprint(out_res[0,:,0,2])
+    [-0.25  0.    0.25]
+    >>> pprint(out_res[0,:,0,3])
+    [-0.25   nan -0.25]
+    """
+    return Lambda(lambda x: add_com_phi_grid_2d_tf(x,
+                                                   z_rad=z_rad,
+                                                   include_r=include_r,
+                                                   include_ir=include_ir),
                   **args)
 
 

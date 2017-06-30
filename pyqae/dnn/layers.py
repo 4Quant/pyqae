@@ -239,6 +239,88 @@ def add_com_grid_tf(in_layer,
             return xy_vec
 
 
+def add_com_grid_2d_tf(in_layer,
+                       layer_concat=False,
+                       as_r_vec=False
+                       ):
+    # type: (tf.Tensor, bool, bool) -> tf.Tensor
+    """
+    Adds spatial grids to images for making segmentation easier
+    This particular example utilizes the image-weighted center of mass by
+    summing the input layer across the channels.
+    It also normalizes the grid by using the weighted standard deviation
+
+    :param in_layer:
+    :param layer_concat:
+    :return:
+    >>> _testimg = np.ones((4, 3, 2, 1))
+    >>> out_img = _setup_and_test(add_com_grid_2d_tf, _testimg)
+    setup_net [(4, 3, 2, 1)] (4, ?, ?, 2)
+    >>> out_img.shape
+    (4, 3, 2, 2)
+    >>> pprint(out_img[0, :, 0, 0])
+    [-1.22  0.    1.22]
+    >>> pprint(out_img[0, 0, :, 1])
+    [-1.  1.]
+    >>> out_img = _setup_and_test(lambda x: add_com_grid_2d_tf(x, as_r_vec=True), _testimg)
+    setup_net [(4, 3, 2, 1)] (4, ?, ?, 1)
+    >>> out_img.shape
+    (4, 3, 2, 1)
+    >>> pprint(out_img[0, :, 0, 0])
+    [ 1.58  1.    1.58]
+    """
+    with tf.variable_scope('com_grid_op_2d'):
+        with tf.variable_scope('initialize'):
+            batch_size = tf.shape(in_layer)[0]
+            xg_wid = tf.shape(in_layer)[1]
+            yg_wid = tf.shape(in_layer)[2]
+
+            mask_sum = tf.reduce_sum(in_layer, 3)
+        with tf.variable_scope('setup_com'):
+
+            _, xx, yy = tf.meshgrid(
+                tf.linspace(0., 0., batch_size),
+                tf.linspace(-1., 1., xg_wid),
+                tf.linspace(-1., 1., yg_wid),
+                indexing='ij')
+
+        with tf.variable_scope('calc_com'):
+            svar_list = [xx, yy]
+            sm_list = [
+                tf.reduce_sum(c_var * mask_sum, [1, 2]) * 1 / tf.reduce_sum(
+                    mask_sum, [1, 2]) for c_var in svar_list]
+            # wstd is np.sqrt(np.sum(w_y*np.square(t_x))/np.sum(w_y)-np.square(np.sum(w_y*t_x)/np.sum(w_y)))
+            sd_list = [
+                tf.sqrt(tf.reduce_sum(mask_sum * tf.square(c_var), [1, 2]) /
+                        tf.reduce_sum(mask_sum, [1, 2]) - tf.square(m_var))
+                for m_var, c_var in zip(sm_list, svar_list)
+            ]
+            expand_op = lambda iv: tf.expand_dims(tf.expand_dims(
+                tf.expand_dims(iv, -1), -1), -1)
+            tile_op = lambda iv: tf.tile(iv, [1, xg_wid, yg_wid, 1])
+            res_op = lambda iv: tile_op(expand_op(iv))
+
+            sm_matlist = [res_op(c_var) for c_var in sm_list]
+            sd_matlist = [res_op(c_var) for c_var in sd_list]
+
+        with tf.variable_scope('make_grid'):
+            out_var = [(tf.reshape(c_var, (
+                batch_size, xg_wid, yg_wid, 1)) - c_sm) / c_sd
+                       for c_var, c_sm, c_sd in zip(svar_list, sm_matlist,
+                                                    sd_matlist)]
+
+            xy_vec = tf.concat(out_var, -1)
+            if as_r_vec:
+                xy_vec = tf.expand_dims(
+                    tf.sqrt(tf.reduce_sum(tf.square(xy_vec), -1)),
+                    -1)
+
+        if layer_concat:
+            return tf.concat([in_layer, xy_vec], -1)
+        else:
+            return xy_vec
+
+
 def spatial_gradient_tf(in_img):
     # type: (tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
     """
@@ -284,6 +366,44 @@ def spatial_gradient_tf(in_img):
         return (0.5 * dx_img, 0.5 * dy_img, 0.5 * dz_img)
 
 
+def spatial_gradient_2d_tf(in_img):
+    # type: (tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]
+    """
+    Calculate the 2d spatial gradient in x,y using tensorflow
+    The channel dimension is completely ignored and the batches are kept
+    consistent.
+    :param in_img: a 4d tensor sized as batch, x, y, channel
+    :return:
+    NOTE:: the doctests are written to only test the main region, due to
+    boundary issues the edges are different (not massively) between
+    np.gradient and this function, eventually a better edge scaling should
+    be implemented
+    >>> _testimg = np.ones((4, 4))
+    >>> _testimg = np.sum(np.power(np.stack(meshgridnd_like(_testimg),-1),2),-1)
+    >>> _testimg = np.expand_dims(np.expand_dims(_testimg,0),-1)
+    >>> dx, dy = _setup_and_test(spatial_gradient_2d_tf, _testimg, is_list=True)
+    >>> dx.shape, dy.shape
+    ((1, 4, 4, 1), (1, 4, 4, 1))
+    >>> ndx, ndy = np.gradient(_testimg[0,:,:,0])
+    >>> (ndx.shape, ndy.shape)
+    ((4, 4), (4, 4))
+    >>> [(a,b) for a,b in zip(ndx[:,0],dx[0,1:-1,0,0])]
+    [(1.0, 2.0), (2.0, 4.0)]
+    >>> [(a,b) for a,b in zip(ndy[0,:],dy[0,0,1:-1,0])]
+    [(1.0, 2.0), (2.0, 4.0)]
+    >>> np.sum(ndx-dx[0,:,:,0],(1))
+    array([  2.,   0.,   0.,  10.])
+    >>> np.sum(ndy-dy[0,:,:,0], (0))
+    array([  2.,   0.,   0.,  10.])
+    """
+    with tf.variable_scope('spatial_gradient_2d'):
+        pad_r = tf.pad(in_img, [[0, 0], [1, 1], [1, 1], [0, 0]],
+                       "SYMMETRIC")
+        dx_img = pad_r[:, 2:, 1:-1, :] - pad_r[:, 0:-2, 1:-1, :]
+        dy_img = pad_r[:, 1:-1, 2:, :] - pad_r[:, 1:-1, 0:-2, :]
+        return (0.5 * dx_img, 0.5 * dy_img)
+
+
 def phi_coord_tf(r_img, z_rad=0.0,
                  include_r=False,
                  include_ir=False,
@@ -305,8 +425,8 @@ def phi_coord_tf(r_img, z_rad=0.0,
     setup_net [(1, 4, 3, 2, 1)] (1, 4, 3, 2, 3)
     >>> out_img.shape
     (1, 4, 3, 2, 3)
-    >>> out_img[0, :, 0, 0, 0]
-    array([ 0.33132678,  0.44735149,  0.46363372,  0.44513324], dtype=float32)
+    >>> pprint(out_img[0, :, 0, 0, 0])
+    [ 0.33  0.45  0.46  0.45]
     >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img,0),-1)
     >>> oimg = _setup_and_test(phi_coord_tf, ntimg)[0]
     setup_net [(1, 3, 3, 2, 1)] (1, 3, 3, 2, 3)
@@ -342,15 +462,71 @@ def phi_coord_tf(r_img, z_rad=0.0,
         return tf.concat(out_vec, -1)
 
 
-def add_com_phi_grid_tf(in_layer,
-                        layer_concat=False,
-                        z_rad=0.0,
-                        include_r=False,
-                        include_ir = False
-                        ):
+def phi_coord_2d_tf(r_img,
+                    z_rad=0.0,
+                    include_r=False,
+                    include_ir=False,
+                    ir_smooth=1e-1):
+    # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
+    """
+    Calculate the phi coordinates for tensors using a single step
+    derivatives and arc-sin to create smooth functions for 2d cases
+    :param r_img:
+    :param z_rad:
+    :param include_r: include the r axis
+    :param include_ir: include the inverted r_axis (+1e-1)
+    :return:
+    >>> _testimg = np.ones((4, 3))
+    >>> from scipy.ndimage.morphology import distance_transform_edt
+    >>> _testimg = distance_transform_edt(_testimg)
+    >>> _testimg = np.expand_dims(np.expand_dims(_testimg,0),-1)
+    >>> out_img = _setup_and_test(phi_coord_2d_tf, _testimg)
+    setup_net [(1, 4, 3, 1)] (1, 4, 3, 2)
+    >>> out_img.shape
+    (1, 4, 3, 2)
+    >>> pprint(out_img[0, :, 0, 0])
+    [ 0.38  0.46  0.47  0.46]
+    >>> ntimg = np.expand_dims(np.expand_dims(_simple_dist_img[:,:,0],0),-1)
+    >>> oimg = _setup_and_test(phi_coord_2d_tf, ntimg)[0]
+    setup_net [(1, 3, 3, 1)] (1, 3, 3, 2)
+    >>> pprint(oimg[:, 0 , 0])
+    [-0.25 -0.     nan]
+    >>> pprint(oimg[:, 1 , 1])
+    [ -0.  nan   0.]
+    >>> ffunc = lambda x: phi_coord_2d_tf(x, 0, True, True)
+    >>> oimg = _setup_and_test(ffunc, ntimg)[0]
+    setup_net [(1, 3, 3, 1)] (1, 3, 3, 4)
+    >>> pprint(oimg[:, 0 , 0])
+    [ 1.  0.  0.]
+    >>> pprint(oimg[:, 1 , 1])
+    [ 10.     0.91  10.  ]
+    >>> pprint(oimg[:, 2 , 2])
+    [  nan  0.    0.25]
+    """
+    with tf.variable_scope('phi_coord_2d'):
+        (dx_img, dy_img) = spatial_gradient_2d_tf(r_img)
+        dr_img = tf.sqrt(
+            tf.square(dx_img) + tf.square(dy_img))
+        mask_img = tf.cast(r_img > z_rad, tf.float32)
+        dphi_a_img = tf.asin(dx_img / dr_img) / np.pi * mask_img
+        dphi_b_img = (tf.asin(dy_img / dr_img)) / np.pi * mask_img
+        out_vec = [dphi_a_img, dphi_b_img]
+        if include_ir:
+            out_vec = [1 / (ir_smooth + r_img)] + out_vec
+        if include_r:
+            out_vec = [r_img] + out_vec
+        return tf.concat(out_vec, -1)
+
+
+def add_com_phi_grid_3d_tf(in_layer,
+                           layer_concat=False,
+                           z_rad=0.0,
+                           include_r=False,
+                           include_ir=False
+                           ):
     # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
     """
-    Adds spatial phi grids to images for making segmentation easier
+    Adds spatial phi grids to 3d images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
     summing the input layer across the channels
 
@@ -360,7 +536,7 @@ def add_com_phi_grid_tf(in_layer,
     :param include_r: include the radius channel
     :return:
     >>> _testimg = np.ones((5, 4, 3, 2, 1))
-    >>> out_img = _setup_and_test(add_com_phi_grid_tf, _testimg)
+    >>> out_img = _setup_and_test(add_com_phi_grid_3d_tf, _testimg)
     setup_net [(5, 4, 3, 2, 1)] (5, ?, ?, ?, 3)
     >>> out_img.shape
     (5, 4, 3, 2, 3)
@@ -371,10 +547,47 @@ def add_com_phi_grid_tf(in_layer,
     >>> pprint(out_img[0, 0, 0, :, 2])
     [ 0.  0.]
     """
-    with tf.variable_scope('add_com_phi_grid'):
+    with tf.variable_scope('add_com_phi_grid_3d'):
         r_vec = add_com_grid_tf(in_layer, layer_concat=False, as_r_vec=True)
         phi_out = phi_coord_tf(r_vec, z_rad=z_rad, include_r=include_r,
-                               include_ir = include_ir)
+                               include_ir=include_ir)
+        if layer_concat:
+            return tf.concat([in_layer, phi_out], -1)
+        else:
+            return phi_out
+
+
+def add_com_phi_grid_2d_tf(in_layer,
+                           layer_concat=False,
+                           z_rad=0.0,
+                           include_r=False,
+                           include_ir=False
+                           ):
+    # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
+    """
+    Adds spatial phi grids to 2d images for making segmentation easier
+    This particular example utilizes the image-weighted center of mass by
+    summing the input layer across the channels
+
+    :param in_layer:
+    :param layer_concat:
+    :param z_rad: minimum radius to include
+    :param include_r: include the radius channel
+    :return:
+    >>> _testimg = np.ones((4, 3, 2, 1))
+    >>> out_img = _setup_and_test(add_com_phi_grid_2d_tf, _testimg)
+    setup_net [(4, 3, 2, 1)] (4, ?, ?, 2)
+    >>> out_img.shape
+    (4, 3, 2, 2)
+    >>> pprint(out_img[0, :, 0, 0])
+    [-0.5  nan  0.5]
+    >>> pprint(out_img[0, 0, :, 1])
+    [ 0.  0.]
+    """
+    with tf.variable_scope('add_com_phi_grid_2d'):
+        r_vec = add_com_grid_2d_tf(in_layer, layer_concat=False, as_r_vec=True)
+        phi_out = phi_coord_2d_tf(r_vec, z_rad=z_rad, include_r=include_r,
+                                  include_ir=include_ir)
         if layer_concat:
             return tf.concat([in_layer, phi_out], -1)
         else:
