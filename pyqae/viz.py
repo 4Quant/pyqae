@@ -252,10 +252,10 @@ def label_score(gt_labels, sp_segs):
 
 def _create_tf_graph():
     import tensorflow as tf
-    from pyqae.dnn.layers import add_com_grid_tf
+    from pyqae.dnn.layers import add_com_grid_3d_tf
     with tf.Graph().as_default() as g:
         in_val = tf.placeholder(dtype=tf.float32, shape=(9, 4, 3, 2, 1))
-        out_val = add_com_grid_tf(in_val, False)
+        out_val = add_com_grid_3d_tf(in_val, False)
     return g
 
 def tf_graph_to_dot(in_graph, add_nodes = True, add_edges = True):

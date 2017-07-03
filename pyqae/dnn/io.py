@@ -1,18 +1,16 @@
 import inspect
-import marshal
-
-from tensorflow.python.framework import graph_util
-from tensorflow.python.framework import graph_io
-import tensorflow as tf
 import json
-from tempfile import TemporaryDirectory
-
+import marshal
 import os
 import types
 from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 
 import h5py
 import numpy as np
+import tensorflow as tf
+from tensorflow.python.framework import graph_io
+from tensorflow.python.framework import graph_util
 
 STD_IMPORT_CODE = """from keras import backend as K
 from keras.models import Model
@@ -46,7 +44,9 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
                        prefix,  # type: str
                        export_version,  # type: int
                        make_ascii=False,
-                       image_labels = None # type: Optional[List[Tuple[List[str]]]]
+                       lock_learning_phase=True,
+                       image_labels=None
+                       # type: Optional[List[Tuple[List[str]]]]
                        ):
     # type: (...) -> str
     """
@@ -64,8 +64,16 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, include_r = True, include_ir = True, input_shape=(None, None, None, 1), name='PhiGrid'))
     >>> model_dir = get_temp_dir()
     >>> m_dir = export_keras_as_tf(t_model, model_dir.name, 'test', 0, False)
+    output nodes names are:  ['PhiGrid/add_com_phi_grid_3d/phi_coord_3d/concat']
+    Converted 0 variables to const ops.
+    saved the constant graph (ready for inference) at:  constant_graph_weights.pb
     >>> t_img = np.ones((1, 3, 3, 3, 1))
-    >>> evaluate_tf_model(m_dir, [t_img], show_nodes = True)
+    >>> o_iter = list(evaluate_tf_model(m_dir, [t_img], show_nodes = True))
+    Ops: 281
+    Tensor("PhiGrid_input:0", shape=(?, ?, ?, ?, 1), dtype=float32, device=/device:CPU:0)
+    Tensor("PhiGrid/add_com_phi_grid_3d/phi_coord_3d/concat:0", shape=(?, ?, ?, ?, 5), dtype=float32, device=/device:CPU:0)
+    >>> for (a,_,c) in o_iter[0]: print(a, c.shape)
+    PhiGrid/add_com_phi_grid_3d/phi_coord_3d/concat:0 (1, 3, 3, 3, 5)
     >>> model_dir.cleanup()
     """
     from keras import backend as K
@@ -74,8 +82,11 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     export_path = os.path.join(model_out_dir,
                                '%s_model_%04d' % (prefix, export_version))
     os.makedirs(export_path, exist_ok=False)
-    K.set_learning_phase(0)  # TODO: this doesnt seem to work yet so we
-    # manually hack it in the next one by setting all of these in the feed dict
+
+    if lock_learning_phase:
+        K.set_learning_phase(0)  # TODO: this doesnt seem to work yet so we
+        # TODO:manually hack it in the next one by setting all of these in the feed dict
+
     num_inputs = len(in_model.inputs)
     num_outputs = len(in_model.outputs)
     # NOTE: these need be op's not tensors
@@ -105,10 +116,10 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     with open(os.path.join(export_path, 'graph.json'), 'w') as w:
         json.dump(dict(input=[j.name for j in in_model.inputs],
                        output=[j.name for j in in_model.outputs],
-                       in_shapes = [in_model.get_input_shape_at(i) for i in
-                                    range(num_inputs)],
-                       out_shapes =  [in_model.get_output_shape_at(i) for i in
-                                    range(num_inputs)],
+                       in_shapes=[in_model.get_input_shape_at(i) for i in
+                                  range(num_inputs)],
+                       out_shapes=[in_model.get_output_shape_at(i) for i in
+                                   range(num_inputs)],
                        graph_def=output_graph_name,
                        **extra_keys),
                   w)
@@ -120,12 +131,12 @@ from tensorflow.python.platform import gfile
 from tqdm import tqdm
 
 
-def evaluate_tf_model(in_model_dir, # type: str
-                      in_inputs, # type: List[np.ndarray]
+def evaluate_tf_model(in_model_dir,  # type: str
+                      in_inputs,  # type: List[np.ndarray]
                       show_nodes=False,
                       batch_size=None,
-                      graph_file_name = 'graph.json',
-                      tf_device = '/cpu:0'):
+                      graph_file_name='graph.json',
+                      tf_device='/cpu:0'):
     # type: (...) -> Generator[List[Tuple[str, List[str], np.ndarray]]]
     """
     Evaluate from a saved tensorflow model
@@ -138,16 +149,17 @@ def evaluate_tf_model(in_model_dir, # type: str
     """
     with open(os.path.join(in_model_dir, graph_file_name), 'r') as r:
         model_desc = json.load(r)
+
     def _ch_gen():
-        i=0
+        i = 0
         while True:
             yield 'Ch_{}'.format(i)
-            i+=1
+            i += 1
 
     fake_labels = [[out_layer, _ch_gen()] for out_layer in
                    model_desc['output']]
     out_labels = [(out_name, out_layers) for out_name, out_layers in
-                model_desc.get('image_labels', fake_labels)]
+                  model_desc.get('image_labels', fake_labels)]
 
     with gfile.FastGFile(os.path.join(in_model_dir,
                                       model_desc['graph_def']),
@@ -195,7 +207,6 @@ def evaluate_tf_model(in_model_dir, # type: str
                     yield [(c_label, ch_labels, out_img)
                            for (c_label, ch_labels), out_img
                            in zip(out_labels, c_output)]
-
 
 
 class ImageModel(object):
