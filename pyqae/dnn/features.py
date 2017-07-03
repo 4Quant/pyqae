@@ -210,6 +210,7 @@ def PhiComGrid3DLayer(z_rad,
 def PhiComGrid2DLayer(z_rad,
                       include_r,
                       include_ir=False,
+                      r_scale = 1.0,
                       **args):
     """
     A PhiComGrid layer based on the add_com_phi_grid_2d_tf function which take
@@ -217,6 +218,8 @@ def PhiComGrid2DLayer(z_rad,
     3 coordinates
     :param z_rad: the radius near the middle to black out (force 0)
     :param args:
+    :param r_scale: the value for rescaling the r axis for using the 
+    standard deviations 
     :return:
     >>> from keras.models import Sequential
     >>> t_model = Sequential()
@@ -242,11 +245,23 @@ def PhiComGrid2DLayer(z_rad,
     [-0.25  0.    0.25]
     >>> pprint(out_res[0,:,0,3])
     [-0.25 -0.5  -0.25]
+    >>> m_model = Sequential()
+    >>> m_model.add(PhiComGrid2DLayer(z_rad = 0, r_scale=2.0, include_r = True, include_ir = True, input_shape=(None, None, 1), name='PhiGrid'))
+    >>> out_res = m_model.predict(np.ones((1, 3, 3, 1)))
+    >>> pprint(out_res[0,:,0,0])
+    [ 0.87  0.61  0.87]
+    >>> pprint(out_res[0,:,0,1])
+    [ 1.14  1.61  1.14]
+    >>> pprint(out_res[0,:,0,2])
+    [-0.25  0.    0.25]
+    >>> pprint(out_res[0,:,0,3])
+    [-0.25 -0.5  -0.25]
     """
     return Lambda(lambda x: add_com_phi_grid_2d_tf(x,
                                                    z_rad=z_rad,
                                                    include_r=include_r,
-                                                   include_ir=include_ir),
+                                                   include_ir=include_ir,
+                                                   r_scale = r_scale),
                   **args)
 
 
