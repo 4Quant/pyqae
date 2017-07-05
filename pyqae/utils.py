@@ -111,6 +111,13 @@ from itertools import chain
 pprint = lambda x, p=2: print(np.array_str(x, max_line_width=80, precision=
 p))
 
+def get_error(f, **kwargs):
+    try:
+        f(**kwargs)
+        return "No Error"
+    except Exception as e:
+        return "{}".format(e)
+
 
 def pqueue_map(in_func, in_plist, threads=None):
     in_list = [x for x in in_plist]

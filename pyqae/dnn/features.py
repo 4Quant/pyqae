@@ -4,6 +4,8 @@ import keras.backend as K
 import numpy as np
 import tensorflow as tf
 from keras.layers import Convolution2D, BatchNormalization
+from keras.layers import Flatten, Dense, \
+    Conv2D  # noinspection PyUnresolvedReferences
 from keras.layers import Input, Conv3D, ZeroPadding3D, Cropping3D, add, \
     multiply
 from keras.layers import Lambda
@@ -12,9 +14,10 @@ from keras.models import Sequential
 
 from pyqae.dnn.layers import add_com_phi_grid_2d_tf
 from pyqae.dnn.layers import add_com_phi_grid_3d_tf
-from pyqae.dnn.layers import gkern_nd
-from pyqae.dnn.layers import gkern_tf
-from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
+from pyqae.dnn.layers import gkern_nd, gkern_tf
+from pyqae.dnn.layers import label_2d_to_time_tf
+from pyqae.utils import pprint, \
+    get_error  # noinspection PyUnresolvedReferences
 
 __doc__ = """
 A set of neural networks used to generate relevant features for further
@@ -47,25 +50,28 @@ def mask_net_3d(ishape,
     ====================================================================================================
     RawMask (InputLayer)             (None, 5, 9, 10, 1)   0
     ____________________________________________________________________________________________________
-    ExpandingImage_3_9_9 (ZeroPaddin (None, 11, 27, 28, 1) 0
+    ExpandingImage_3_9_9 (ZeroPaddin (None, 11, 27, 28, 1) 0           RawMask[0][0]
     ____________________________________________________________________________________________________
-    InvertedMask (Lambda)            (None, 11, 27, 28, 1) 0
+    InvertedMask (Lambda)            (None, 11, 27, 28, 1) 0           ExpandingImage_3_9_9[0][0]
     ____________________________________________________________________________________________________
-    BlurMask_7_7_7 (Conv3D)          (None, 11, 27, 28, 1) 343
+    BlurMask_7_7_7 (Conv3D)          (None, 11, 27, 28, 1) 343         ExpandingImage_3_9_9[0][0]
     ____________________________________________________________________________________________________
-    BlurInvMask_5_19_19 (Conv3D)     (None, 11, 27, 28, 1) 1805
+    BlurInvMask_5_19_19 (Conv3D)     (None, 11, 27, 28, 1) 1805        InvertedMask[0][0]
     ____________________________________________________________________________________________________
-    MaskPositive (Multiply)          (None, 11, 27, 28, 1) 0
+    MaskPositive (Multiply)          (None, 11, 27, 28, 1) 0           BlurMask_7_7_7[0][0]
+                                                                       ExpandingImage_3_9_9[0][0]
     ____________________________________________________________________________________________________
-    MaskNegative (Multiply)          (None, 11, 27, 28, 1) 0
+    MaskNegative (Multiply)          (None, 11, 27, 28, 1) 0           BlurInvMask_5_19_19[0][0]
+                                                                       InvertedMask[0][0]
     ____________________________________________________________________________________________________
-    CombiningImage (Add)             (None, 11, 27, 28, 1) 0
+    CombiningImage (Add)             (None, 11, 27, 28, 1) 0           MaskPositive[0][0]
+                                                                       MaskNegative[0][0]
     ____________________________________________________________________________________________________
-    CroppingEdges_3_9_9 (Cropping3D) (None, 5, 9, 10, 1)   0
+    CroppingEdges_3_9_9 (Cropping3D) (None, 5, 9, 10, 1)   0           CombiningImage[0][0]
     ====================================================================================================
-    Total params: 2,148.0
-    Trainable params: 0.0
-    Non-trainable params: 2,148.0
+    Total params: 2,148
+    Trainable params: 0
+    Non-trainable params: 2,148
     ____________________________________________________________________________________________________
     >>> inet2 = mask_net_3d((None, None, None, 1), (1, 1, 1), (2, 2, 2))
     >>> (100*inet2.predict(np.ones((1, 3, 3, 3, 1))).ravel()).astype(int)
@@ -130,19 +136,20 @@ def GlobalSpreadAverage2D(suffix):
     >>> n_node = GlobalSpreadAverage2D(suffix='_GSA')(in_node)
     >>> t_model = Model(inputs = [in_node], outputs = [n_node])
     >>> t_model.summary() # doctest: +NORMALIZE_WHITESPACE
-    _________________________________________________________________
-    Layer (type)                 Output Shape              Param #
-    =================================================================
-    input_1 (InputLayer)         (None, 4, 4, 3)           0
-    _________________________________________________________________
-    GAP_GSA (GlobalAveragePoolin (None, 3)                 0
-    _________________________________________________________________
-    DeepMiddle_GSA (Lambda)      (None, 4, 4, 6)           0
-    =================================================================
-    Total params: 0.0
-    Trainable params: 0.0
-    Non-trainable params: 0.0
-    _________________________________________________________________
+    ____________________________________________________________________________________________________
+    Layer (type)                     Output Shape          Param #     Connected to
+    ====================================================================================================
+    input_1 (InputLayer)             (None, 4, 4, 3)       0
+    ____________________________________________________________________________________________________
+    GAP_GSA (GlobalAveragePooling2D) (None, 3)             0           input_1[0][0]
+    ____________________________________________________________________________________________________
+    DeepMiddle_GSA (Lambda)          (None, 4, 4, 6)       0           GAP_GSA[0][0]
+                                                                       input_1[0][0]
+    ====================================================================================================
+    Total params: 0
+    Trainable params: 0
+    Non-trainable params: 0
+    ____________________________________________________________________________________________________
     """
 
     def _deep_middle(in_block):
@@ -182,9 +189,9 @@ def PhiComGrid3DLayer(z_rad,
     =================================================================
     PhiGrid (Lambda)             (None, None, None, None,  0
     =================================================================
-    Total params: 0.0
-    Trainable params: 0.0
-    Non-trainable params: 0.0
+    Total params: 0
+    Trainable params: 0
+    Non-trainable params: 0
     _________________________________________________________________
     >>> out_res = t_model.predict(np.ones((1, 3, 3, 3, 1)))
     >>> out_res.shape
@@ -210,7 +217,7 @@ def PhiComGrid3DLayer(z_rad,
 def PhiComGrid2DLayer(z_rad,
                       include_r,
                       include_ir=False,
-                      r_scale = 1.0,
+                      r_scale=1.0,
                       **args):
     """
     A PhiComGrid layer based on the add_com_phi_grid_2d_tf function which take
@@ -230,9 +237,9 @@ def PhiComGrid2DLayer(z_rad,
     =================================================================
     PhiGrid (Lambda)             (None, None, None, 4)     0
     =================================================================
-    Total params: 0.0
-    Trainable params: 0.0
-    Non-trainable params: 0.0
+    Total params: 0
+    Trainable params: 0
+    Non-trainable params: 0
     _________________________________________________________________
     >>> out_res = t_model.predict(np.ones((1, 3, 3, 1)))
     >>> out_res.shape
@@ -261,7 +268,70 @@ def PhiComGrid2DLayer(z_rad,
                                                    z_rad=z_rad,
                                                    include_r=include_r,
                                                    include_ir=include_ir,
-                                                   r_scale = r_scale),
+                                                   r_scale=r_scale),
+                  **args)
+
+
+def CCLTimeLayer(channel, time_steps, **args):
+    # type: (int, int) -> keras.layers.Layer
+    """
+    A connected component time layer
+    :param channel:
+    :param time_steps:
+    :param args:
+    :return:
+    >>> m_model = Sequential()
+    >>> m_model.add(CCLTimeLayer(0, 2, input_shape=(3, 3, 1), name='CC'))
+    >>> m_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    CC (Lambda)                  (None, 2, 3, 3, 1)        0
+    =================================================================
+    Total params: 0
+    Trainable params: 0
+    Non-trainable params: 0
+    _________________________________________________________________
+    >>> X_vec = np.ones((1, 3, 3, 1))
+    >>> out_res = m_model.predict(X_vec)
+    >>> out_res.shape
+    (1, 2, 3, 3, 1)
+    >>> pprint(out_res.squeeze())
+    [[[ 1.  1.  1.]
+      [ 1.  1.  1.]
+      [ 1.  1.  1.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  0.]]]
+    >>> m_model.add(Flatten())
+    >>> m_model.add(Dense(1))
+    >>> m_model.compile(optimizer='sgd', loss = 'mse') # should be trainable
+    >>> _ = m_model.fit(x=X_vec, y=np.ones((1,1)), epochs=1, verbose=False)
+    >>> n_model = Sequential()
+    >>> n_model.add(Conv2D(1, kernel_size=(1,1), name = 'C2D', input_shape = (3, 3, 1)))
+    >>> n_model.add(m_model)
+    >>> n_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    C2D (Conv2D)                 (None, 3, 3, 1)           2
+    _________________________________________________________________
+    sequential_1 (Sequential)    (None, 1)                 19
+    =================================================================
+    Total params: 21
+    Trainable params: 21
+    Non-trainable params: 0
+    _________________________________________________________________
+    >>> n_model.compile(optimizer='sgd', loss = 'mse') # shouldn't be trainable
+    >>> get_error(n_model.fit,x=X_vec, y=np.ones((1,1)))
+    'None values not supported.'
+    """
+    lay_func = lambda x: label_2d_to_time_tf(x, channel=channel,
+                                             time_steps=time_steps)
+
+    return Lambda(lay_func,
+                  # output_shape=(time_steps, None, None, 1),
                   **args)
 
 
@@ -312,7 +382,7 @@ def dog_net_2d(gk_count,
     :return:
     >>> dog_model = dog_net_2d(2, 1, 0.5, 2)
     >>> dog_model.summary() #doctest: +NORMALIZE_WHITESPACE
-    _________________________________________________________________
+     _________________________________________________________________
     Layer (type)                 Output Shape              Param #
     =================================================================
     AllGaussianStep (Conv2D)     (None, None, None, 2)     18
@@ -321,9 +391,9 @@ def dog_net_2d(gk_count,
     _________________________________________________________________
     NormalizeDiffModel (BatchNor (None, None, None, 1)     4
     =================================================================
-    Total params: 24.0
-    Trainable params: 4.0
-    Non-trainable params: 20.0
+    Total params: 24
+    Trainable params: 4
+    Non-trainable params: 20
     _________________________________________________________________
     >>> in_img = 1000*np.expand_dims(np.expand_dims(np.eye(3), 0),-1)
     >>> iv = dog_model.predict(in_img)
@@ -409,13 +479,14 @@ def vdog_net_2d(gk_count,
     ____________________________________________________________________________________________________
     XY_VoxDims (InputLayer)          (None, 2)             0
     ____________________________________________________________________________________________________
-    AllGaussianStep (Lambda)         (None, None, None, 2) 0
+    AllGaussianStep (Lambda)         (None, None, None, 2) 0           InputImage[0][0]
+                                                                       XY_VoxDims[0][0]
     ____________________________________________________________________________________________________
-    DifferenceStep (Conv2D)          (None, None, None, 1) 2
+    DifferenceStep (Conv2D)          (None, None, None, 1) 2           AllGaussianStep[0][0]
     ====================================================================================================
-    Total params: 2.0
-    Trainable params: 2.0
-    Non-trainable params: 0.0
+    Total params: 2
+    Trainable params: 2
+    Non-trainable params: 0
     ____________________________________________________________________________________________________
     >>> in_img = 1*np.expand_dims(np.expand_dims(np.eye(15), 0),-1)
     >>> in_vox = np.array([1.0, 1.0]).reshape((1, 2))
@@ -539,13 +610,14 @@ def vdog_net_3d(gk_count,  # type: int
     ____________________________________________________________________________________________________
     XYZ_VoxDims (InputLayer)         (None, 3)             0
     ____________________________________________________________________________________________________
-    AllGaussianStep (Lambda)         (None, None, None, No 0
+    AllGaussianStep (Lambda)         (None, None, None, No 0           InputImage[0][0]
+                                                                       XYZ_VoxDims[0][0]
     ____________________________________________________________________________________________________
-    DifferenceStep (Conv3D)          (None, None, None, No 2
+    DifferenceStep (Conv3D)          (None, None, None, No 2           AllGaussianStep[0][0]
     ====================================================================================================
-    Total params: 2.0
-    Trainable params: 2.0
-    Non-trainable params: 0.0
+    Total params: 2
+    Trainable params: 2
+    Non-trainable params: 0
     ____________________________________________________________________________________________________
     >>> in_img = np.expand_dims(np.expand_dims(np.expand_dims(np.eye(15), 0),-1), -1)
     >>> in_vox = np.array([1.0, 1.0, 1.0]).reshape((1, 3))

@@ -10,7 +10,6 @@ A set of Tensorflow-based layers and operations for including in models
 allowing meaningful spatial and medical information to be included in images
 """
 
-
 def _setup_and_test(in_func, *in_arrs, is_list=False, round=False):
     """
     For setting up a simple graph and testing it
@@ -914,23 +913,23 @@ def label_tf(inp, channel = 0, **label_args):
     :param label_args:
     :return:
     >>> label_tf(tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 1)))
-    <tf.Tensor 'label_2d/scipy_label:0' shape=<unknown> dtype=int32>
+    <tf.Tensor 'label_2d/scipy_label:0' shape=(1, 2, 3, 1) dtype=int32>
     >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
     >>> _setup_and_test(label_tf, s_eye, round = True).squeeze()
-    setup_net [(1, 3, 3, 1)] <unknown>
+    setup_net [(1, 3, 3, 1)] (1, 3, 3, 1)
     array([[ 1.,  0.,  0.],
            [ 0.,  2.,  0.],
            [ 0.,  0.,  3.]])
     >>> s_eye[0,1,1,0] = 0
     >>> _setup_and_test(label_tf, s_eye, round = True).squeeze()
-    setup_net [(1, 3, 3, 1)] <unknown>
+    setup_net [(1, 3, 3, 1)] (1, 3, 3, 1)
     array([[ 1.,  0.,  0.],
            [ 0.,  0.,  0.],
            [ 0.,  0.,  2.]])
     >>> s_eye2 = np.expand_dims(np.expand_dims(np.eye(3)[::-1],0),-1)
     >>> s_full = np.concatenate([s_eye, s_eye2],0) # check two different batch
     >>> _setup_and_test(label_tf, s_full, round = True).squeeze()
-    setup_net [(2, 3, 3, 1)] <unknown>
+    setup_net [(2, 3, 3, 1)] (2, 3, 3, 1)
     array([[[ 1.,  0.,  0.],
             [ 0.,  0.,  0.],
             [ 0.,  0.,  2.]],
@@ -945,7 +944,10 @@ def label_tf(inp, channel = 0, **label_args):
             np.stack([label(cx[...,channel], **label_args)[0]
                                      for cx in x],0),-1)
     with tf.name_scope('label_2d'):
-        return tf.py_func(batch_label, [inp], tf.int32, name = 'scipy_label')
+        y = tf.py_func(batch_label, [inp], tf.int32, name = 'scipy_label')
+        new_shape = inp.get_shape()
+        y.set_shape([new_shape[0], new_shape[1], new_shape[2], 1])
+        return y
 
 def batch_label_time(in_batch, channel, time_steps, **label_args):
     # type: (np.ndarray) -> np.ndarray
@@ -1008,7 +1010,7 @@ def batch_label_time(in_batch, channel, time_steps, **label_args):
             out_batch[i, j, :, :, 0] = (c_label == (j+1)) # don't include j=0
     return out_batch
 
-def label_2d_to_time(inp, channel = 0, time_steps = 5, **label_args):
+def label_2d_to_time_tf(inp, channel = 0, time_steps = 5, **label_args):
     """
     Takes an input image, calculates the connected component labels and then
     returns each component as a time-step
@@ -1018,11 +1020,11 @@ def label_2d_to_time(inp, channel = 0, time_steps = 5, **label_args):
     :param time_steps: number of time steps
     :return:
     >>> x = tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 1))
-    >>> label_2d_to_time(x, 0, 3)
-    <tf.Tensor 'label_2d_to_time/scipy_batch_label:0' shape=<unknown> dtype=float32>
+    >>> label_2d_to_time_tf(x, 0, 3)
+    <tf.Tensor 'label_2d_to_time/scipy_batch_label:0' shape=(1, 3, 2, 3, 1) dtype=float32>
     >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
-    >>> _setup_and_test(label_2d_to_time, s_eye, round = True).squeeze()
-    setup_net [(1, 3, 3, 1)] <unknown>
+    >>> _setup_and_test(label_2d_to_time_tf, s_eye, round = True).squeeze()
+    setup_net [(1, 3, 3, 1)] (1, 5, 3, 3, 1)
     array([[[ 1.,  0.,  0.],
             [ 0.,  0.,  0.],
             [ 0.,  0.,  0.]],
@@ -1044,9 +1046,12 @@ def label_2d_to_time(inp, channel = 0, time_steps = 5, **label_args):
             [ 0.,  0.,  0.]]])
     """
     with tf.name_scope('label_2d_to_time'):
-        return tf.py_func(lambda x: batch_label_time(x, channel=channel,
+        y = tf.py_func(lambda x: batch_label_time(x, channel=channel,
                                                      time_steps=time_steps,
                                                      **label_args),
                           [inp],
                           tf.float32,
                           name='scipy_batch_label')
+        new_shape = inp.get_shape()
+        y.set_shape([new_shape[0], time_steps, new_shape[1], new_shape[2], 1])
+        return y
