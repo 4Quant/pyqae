@@ -11,8 +11,24 @@ from numpy import stack
 import os
 from skimage.io import imsave
 import warnings
-from pyqae.utils import Optional, List, Tuple
+from pyqae.utils import Optional, List, Tuple, pprint # noinspection PyUnresolvedReferences
 
+def in_nd(x,y):
+    # type: (np.ndarray, np.ndarray) -> np.ndarray
+    """
+    A simple wrapper for the in1d function to work on ND data
+    :param x:
+    :param y:
+    :return:
+    >>> t_img = np.arange(6).reshape((2,3))
+    >>> pprint(t_img)
+    [[0 1 2]
+     [3 4 5]]
+    >>> pprint(in_nd(t_img, [4,5]))
+    [[False False False]
+     [False  True  True]]
+    """
+    return np.in1d(x.ravel(),y).reshape(x.shape)
 
 def meshgridnd_like(in_img,
                     rng_func=range):
