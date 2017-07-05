@@ -1,14 +1,17 @@
+from warnings import warn
+
 import numpy as np
 import tensorflow as tf
 from skimage.measure import regionprops
 
-from pyqae.nd import meshgridnd_like
+from pyqae.nd import meshgridnd_like, get_bbox, apply_bbox
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
 allowing meaningful spatial and medical information to be included in images
 """
+
 
 def _setup_and_test(in_func, *in_arrs, is_list=False, round=False):
     """
@@ -152,9 +155,9 @@ def add_simple_grid_tf(in_layer,  # type: tf.Tensor
 
 
 def add_com_grid_3d_tf(in_layer,
-                    layer_concat=False,
-                    as_r_vec=False
-                    ):
+                       layer_concat=False,
+                       as_r_vec=False
+                       ):
     # type: (tf.Tensor, bool, bool) -> tf.Tensor
     """
     Adds spatial grids to images for making segmentation easier
@@ -241,7 +244,7 @@ def add_com_grid_3d_tf(in_layer,
 def add_com_grid_2d_tf(in_layer,
                        layer_concat=False,
                        as_r_vec=False,
-                       r_scale = 1.0
+                       r_scale=1.0
                        ):
     # type: (tf.Tensor, bool, bool, float) -> tf.Tensor
     """
@@ -408,9 +411,9 @@ def spatial_gradient_2d_tf(in_img):
 
 
 def phi_coord_3d_tf(r_img, z_rad=0.0,
-                 include_r=False,
-                 include_ir=False,
-                 ir_smooth=1e-2):
+                    include_r=False,
+                    include_ir=False,
+                    ir_smooth=1e-2):
     # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
@@ -557,7 +560,7 @@ def add_com_phi_grid_3d_tf(in_layer,
     with tf.variable_scope('add_com_phi_grid_3d'):
         r_vec = add_com_grid_3d_tf(in_layer, layer_concat=False, as_r_vec=True)
         phi_out = phi_coord_3d_tf(r_vec, z_rad=z_rad, include_r=include_r,
-                               include_ir=include_ir)
+                                  include_ir=include_ir)
         if layer_concat:
             return tf.concat([in_layer, phi_out], -1)
         else:
@@ -569,7 +572,7 @@ def add_com_phi_grid_2d_tf(in_layer,
                            z_rad=0.0,
                            include_r=False,
                            include_ir=False,
-                           r_scale = 1.0
+                           r_scale=1.0
                            ):
     # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
     """
@@ -597,7 +600,7 @@ def add_com_phi_grid_2d_tf(in_layer,
         r_vec = add_com_grid_2d_tf(in_layer,
                                    layer_concat=False,
                                    as_r_vec=True,
-                                   r_scale = r_scale)
+                                   r_scale=r_scale)
         phi_out = phi_coord_2d_tf(r_vec, z_rad=z_rad,
                                   include_r=include_r,
                                   include_ir=include_ir)
@@ -905,7 +908,7 @@ def gkern_tf(d=2, kernlen=21, nsigs=3, norm=True):
         return kernel_raw
 
 
-def label_tf(inp, channel = 0, **label_args):
+def label_tf(inp, channel=0, **label_args):
     """
     Connected component labeling as a tensorflow op maps from a black and
     white image to a image with integer specifying components
@@ -941,15 +944,18 @@ def label_tf(inp, channel = 0, **label_args):
     from scipy.ndimage import label
     def batch_label(x):
         return np.expand_dims(
-            np.stack([label(cx[...,channel], **label_args)[0]
-                                     for cx in x],0),-1)
+            np.stack([label(cx[..., channel], **label_args)[0]
+                      for cx in x], 0), -1)
+
     with tf.name_scope('label_2d'):
-        y = tf.py_func(batch_label, [inp], tf.int32, name = 'scipy_label')
+        y = tf.py_func(batch_label, [inp], tf.int32, name='scipy_label')
         new_shape = inp.get_shape()
         y.set_shape([new_shape[0], new_shape[1], new_shape[2], 1])
         return y
 
-def batch_label_time(in_batch, channel, time_steps, **label_args):
+
+def batch_label_time(in_batch, channel, time_steps, channel_thresh=0.5,
+                     **label_args):
     # type: (np.ndarray) -> np.ndarray
     """
     Takes an input and transforms the results into a time series of
@@ -1000,17 +1006,19 @@ def batch_label_time(in_batch, channel, time_steps, **label_args):
        [ 1.  0.  0.]]]]
     """
     from scipy.ndimage import label
-    assert len(in_batch.shape)==4, "Expected 4D input"
+    assert len(in_batch.shape) == 4, "Expected 4D input"
     batch_size, x_wid, y_wid, channels = in_batch.shape
     out_batch = np.zeros((batch_size, time_steps, x_wid, y_wid, 1),
-                         dtype = np.float32)
+                         dtype=np.float32)
     for i, c_img in enumerate(in_batch):
-        c_label = label(c_img[..., channel], **label_args)[0]
+        c_label = label(c_img[..., channel] > channel_thresh, **label_args)[0]
         for j in range(time_steps):
-            out_batch[i, j, :, :, 0] = (c_label == (j+1)) # don't include j=0
+            out_batch[i, j, :, :, 0] = (
+            c_label == (j + 1))  # don't include j=0
     return out_batch
 
-def label_2d_to_time_tf(inp, channel = 0, time_steps = 5, **label_args):
+
+def label_2d_to_time_tf(inp, channel=0, time_steps=5, **label_args):
     """
     Takes an input image, calculates the connected component labels and then
     returns each component as a time-step
@@ -1047,11 +1055,166 @@ def label_2d_to_time_tf(inp, channel = 0, time_steps = 5, **label_args):
     """
     with tf.name_scope('label_2d_to_time'):
         y = tf.py_func(lambda x: batch_label_time(x, channel=channel,
-                                                     time_steps=time_steps,
-                                                     **label_args),
-                          [inp],
-                          tf.float32,
-                          name='scipy_batch_label')
+                                                  time_steps=time_steps,
+                                                  **label_args),
+                       [inp],
+                       tf.float32,
+                       name='scipy_batch_label')
         new_shape = inp.get_shape()
         y.set_shape([new_shape[0], time_steps, new_shape[1], new_shape[2], 1])
+        return y
+
+
+def batch_label_time_zoom(in_batch,
+                          channel,
+                          time_steps,
+                          x_size,
+                          y_size,
+                          channel_thresh=0.5,
+                          zoom_order=3,
+                          **label_args):
+    """
+
+    :param in_batch:
+    :param channel:
+    :param time_steps:
+    :param x_size:
+    :param y_size:
+    :param channel_thresh:
+    :param label_args:
+    :return:
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(2),0),-1)
+    >>> s_eye2 = np.roll(s_eye, -1)
+    >>> from scipy.ndimage import zoom
+    >>> s_full = zoom(np.concatenate([s_eye, s_eye2],-1), [1, 2, 2, 1], order=0)
+    >>> pprint(s_full[0, :, :, 0])
+    [[ 1.  1.  0.  0.]
+     [ 1.  1.  0.  0.]
+     [ 0.  0.  1.  1.]
+     [ 0.  0.  1.  1.]]
+    >>> pprint(s_full[0, :, :, 1])
+    [[ 0.  0.  0.  0.]
+     [ 0.  0.  0.  0.]
+     [ 1.  1.  1.  1.]
+     [ 1.  1.  1.  1.]]
+    >>> o_mat = batch_label_time_zoom(s_full, 0, 3, 3, 3)
+    >>> o_mat.shape
+    (1, 3, 3, 3, 2)
+    >>> pprint(o_mat[...,0].squeeze())
+    [[[ 1.  1.  1.]
+      [ 1.  1.  1.]
+      [ 1.  1.  1.]]
+    <BLANKLINE>
+     [[ 1.  1.  1.]
+      [ 1.  1.  1.]
+      [ 1.  1.  1.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  0.]]]
+    >>> pprint(o_mat[...,1].squeeze())
+    [[[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  0.]]
+    <BLANKLINE>
+     [[ 1.  1.  1.]
+      [ 1.  1.  1.]
+      [ 1.  1.  1.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  0.]]]
+    """
+    from scipy.ndimage import label, zoom
+
+    assert len(in_batch.shape) == 4, "Expected 4D input"
+    batch_size, _, _, channels = in_batch.shape
+    out_batch = np.zeros((batch_size, time_steps, x_size, y_size, channels),
+                         dtype=np.float32)
+    for i, c_img in enumerate(in_batch):
+        c_label = label(c_img[..., channel] > channel_thresh, **label_args)[0]
+        for j in range(time_steps):
+            # don't include j=0
+            c_bbox = get_bbox(c_label == (j + 1))
+            for ch in range(channels):
+                c_ch_roi = apply_bbox(c_img[..., ch], c_bbox)
+                if np.prod(c_ch_roi.shape) > 0:
+                    zoom_fact = [x_size / c_ch_roi.shape[0],
+                                 y_size / c_ch_roi.shape[1]]
+                    try:
+                        zoom(c_ch_roi,
+                             zoom=zoom_fact,
+                             output=out_batch[i, j, :, :, ch],
+                             order=zoom_order)
+                    except Exception as e:
+                        warn("""Message: {} cannot be applied to {} because 
+                        {}""".format(zoom_fact, c_ch_roi.shape, e),
+                             RuntimeWarning)
+
+    return out_batch
+
+
+def label_time_zoom_tf(inp_batch,
+                       channel,
+                       time_steps,
+                       x_size,
+                       y_size,
+                       channel_thresh=0.5,
+                       **lt_args):
+    # type: (...) -> tf.Tensor
+    """
+    Takes an input image, calculates the connected component labels and then
+    returns each component as a time-step
+    :param inp_batch: image (batch_size, x_wid, y_wid, channels)
+    :param channel:
+    :param time_steps:
+    :param x_size:
+    :param y_size:
+    :param channel_thresh:
+    :param lt_args:
+    :return:
+    >>> x = tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 1))
+    >>> label_time_zoom_tf(x, 0, 3, 9, 9)
+    <tf.Tensor 'label_zoom_time/scipy_batch_label_zoom:0' shape=(1, 3, 9, 9, 1) dtype=float32>
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(2),0),-1)
+    >>> s_eye2 = np.roll(s_eye, -1)
+    >>> from scipy.ndimage import zoom
+    >>> s_full = zoom(np.concatenate([s_eye, s_eye2],-1), [1, 2, 2, 1], order=0)
+    >>> f = lambda x: label_time_zoom_tf(x, 0, 3, 2, 2)
+    >>> _setup_and_test(f, s_full, round = True).squeeze()
+    setup_net [(1, 4, 4, 2)] (1, 3, 2, 2, 2)
+    array([[[[ 1.,  0.],
+             [ 1.,  0.]],
+    <BLANKLINE>
+            [[ 1.,  0.],
+             [ 1.,  0.]]],
+    <BLANKLINE>
+    <BLANKLINE>
+           [[[ 1.,  1.],
+             [ 1.,  1.]],
+    <BLANKLINE>
+            [[ 1.,  1.],
+             [ 1.,  1.]]],
+    <BLANKLINE>
+    <BLANKLINE>
+           [[[ 0.,  0.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.]]]])
+    """
+    with tf.name_scope('label_zoom_time'):
+        y = tf.py_func(lambda x: batch_label_time_zoom(in_batch=x,
+                                                       channel=channel,
+                                                       time_steps=time_steps,
+                                                       x_size=x_size,
+                                                       y_size=y_size,
+                                                       channel_thresh=
+                                                       channel_thresh,
+                                                       **lt_args),
+                       [inp_batch],
+                       tf.float32,
+                       name='scipy_batch_label_zoom')
+        new_shape = inp_batch.get_shape()
+        y.set_shape([new_shape[0], time_steps, x_size, y_size, new_shape[-1]])
         return y

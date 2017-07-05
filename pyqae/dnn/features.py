@@ -15,7 +15,7 @@ from keras.models import Sequential
 from pyqae.dnn.layers import add_com_phi_grid_2d_tf
 from pyqae.dnn.layers import add_com_phi_grid_3d_tf
 from pyqae.dnn.layers import gkern_nd, gkern_tf
-from pyqae.dnn.layers import label_2d_to_time_tf
+from pyqae.dnn.layers import label_2d_to_time_tf, label_time_zoom_tf
 from pyqae.utils import pprint, \
     get_error  # noinspection PyUnresolvedReferences
 
@@ -332,6 +332,74 @@ def CCLTimeLayer(channel, time_steps, **args):
 
     return Lambda(lay_func,
                   # output_shape=(time_steps, None, None, 1),
+                  **args)
+
+
+def CCLTimeZoomLayer(channel, time_steps, x_size, y_size, **args):
+    # type: (int, int, int, int) -> keras.layers.Layer
+    """
+    A connected component time layer
+    :param channel:
+    :param time_steps:
+    :param x_size:
+    :param y_size:
+    :param args: layer (Lambda) arguments like name
+    :return:
+    >>> m_model = Sequential()
+    >>> m_model.add(CCLTimeZoomLayer(0, 2, 4, 5, input_shape=(3, 3, 1), name='CC'))
+    >>> m_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    CC (Lambda)                  (None, 2, 4, 5, 1)        0
+    =================================================================
+    Total params: 0
+    Trainable params: 0
+    Non-trainable params: 0
+    _________________________________________________________________
+    >>> X_vec = np.ones((1, 3, 3, 1))
+    >>> out_res = m_model.predict(X_vec)
+    >>> out_res.shape
+    (1, 2, 4, 5, 1)
+    >>> pprint(out_res.squeeze())
+    [[[ 1.  1.  1.  1.  1.]
+      [ 1.  1.  1.  1.  1.]
+      [ 1.  1.  1.  1.  1.]
+      [ 1.  1.  1.  1.  1.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.  0.  0.]
+      [ 0.  0.  0.  0.  0.]
+      [ 0.  0.  0.  0.  0.]
+      [ 0.  0.  0.  0.  0.]]]
+    >>> m_model.add(Flatten())
+    >>> m_model.add(Dense(1))
+    >>> m_model.compile(optimizer='sgd', loss = 'mse') # should be trainable
+    >>> _ = m_model.fit(x=X_vec, y=np.ones((1,1)), epochs=1, verbose=False)
+    >>> n_model = Sequential()
+    >>> n_model.add(Conv2D(1, kernel_size=(1,1), name = 'C2D', input_shape = (3, 3, 1)))
+    >>> n_model.add(m_model)
+    >>> n_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    C2D (Conv2D)                 (None, 3, 3, 1)           2
+    _________________________________________________________________
+    sequential_3 (Sequential)    (None, 1)                 41
+    =================================================================
+    Total params: 43
+    Trainable params: 43
+    Non-trainable params: 0
+    _________________________________________________________________
+    >>> n_model.compile(optimizer='sgd', loss = 'mse') # shouldn't be trainable
+    >>> get_error(n_model.fit,x=X_vec, y=np.ones((1,1)))
+    'None values not supported.'
+    """
+    lay_func = lambda x: label_time_zoom_tf(x, channel=channel,
+                                            time_steps=time_steps,
+                                            x_size=x_size,
+                                            y_size=y_size)
+
+    return Lambda(lay_func,
                   **args)
 
 
