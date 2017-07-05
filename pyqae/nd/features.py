@@ -1,7 +1,38 @@
 from itertools import product
 
 import numpy as np
+from scipy.ndimage import label
 from sklearn.feature_extraction.image import extract_patches
+
+from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
+
+
+def sorted_label(in_img, **kwargs):
+    # type: (np.ndarray) -> np.ndarray
+    """
+    Return labeled image in a sorted manner by area (in 2D, length in 1D and volume in 3D)
+    :param in_img:
+    :param kwargs: arguments for the label command
+    :return:
+    >>> t_img = np.eye(3)
+    >>> pprint(sorted_label(t_img))
+    [[1 0 0]
+     [0 2 0]
+     [0 0 3]]
+    >>> t_img[1,2] = 1
+    >>> pprint(sorted_label(t_img))
+    [[2 0 0]
+     [0 1 1]
+     [0 0 1]]
+    """
+    lab_img, _ = label(in_img, **kwargs)
+    new_lab_img = np.zeros_like(lab_img)
+    lab_counts = [(i, np.sum(lab_img == i)) for i in
+                  range(1, int(lab_img.max()) + 1)]
+    lab_counts = sorted(lab_counts, key=lambda x: -x[1])
+    for i, (j, _) in enumerate(lab_counts, 1):
+        new_lab_img[lab_img == j] = i
+    return new_lab_img
 
 
 def reconstruct_from_patches(patches, image_size):

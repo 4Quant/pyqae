@@ -58,7 +58,7 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     :param make_ascii: make an ascii version of the graph
     :return: the name of the folder where the graph is saved
     here is an example showing the IO working on a non-standard Keras model
-    >>> from pyqae.dnn.features import PhiComGrid3DLayer
+    >>> from pyqae.dnn.features import PhiComGrid3DLayer, CCLTimeZoomLayer
     >>> from keras.models import Sequential
     >>> t_model = Sequential()
     >>> t_model.add(PhiComGrid3DLayer(z_rad=0.0, include_r = True, include_ir = True, input_shape=(None, None, None, 1), name='PhiGrid'))
@@ -74,6 +74,19 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     Tensor("PhiGrid/add_com_phi_grid_3d/phi_coord_3d/concat:0", shape=(?, ?, ?, ?, 5), dtype=float32, device=/device:CPU:0)
     >>> for (a,_,c) in o_iter[0]: print(a, c.shape)
     PhiGrid/add_com_phi_grid_3d/phi_coord_3d/concat:0 (1, 3, 3, 3, 5)
+    >>> n_model = Sequential()
+    >>> n_model.add(CCLTimeZoomLayer(0, 2, 4, 5, input_shape=(3, 3, 1), name='CC'))
+    >>> n_dir = export_keras_as_tf(n_model, model_dir.name, 'test', 1, False)
+    output nodes names are:  ['CC/label_zoom_time/scipy_batch_label_zoom']
+    Converted 0 variables to const ops.
+    saved the constant graph (ready for inference) at:  constant_graph_weights.pb
+    >>> t_img = np.ones((1, 3, 3, 1))
+    >>> o_iter = list(evaluate_tf_model(n_dir, [t_img], show_nodes = True))
+    Ops: 2
+    Tensor("CC_input:0", shape=(?, 3, 3, 1), dtype=float32, device=/device:CPU:0)
+    Tensor("CC/label_zoom_time/scipy_batch_label_zoom:0", dtype=float32, device=/device:CPU:0)
+    >>> for (a,_,c) in o_iter[0]: print(a, c.shape)
+    CC/label_zoom_time/scipy_batch_label_zoom:0 (1, 2, 4, 5, 1)
     >>> model_dir.cleanup()
     """
     from keras import backend as K

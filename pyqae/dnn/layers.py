@@ -3,9 +3,11 @@ from warnings import warn
 import numpy as np
 import tensorflow as tf
 from skimage.measure import regionprops
-
+from scipy.ndimage import label
 from pyqae.nd import meshgridnd_like, get_bbox, apply_bbox
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
+from pyqae.nd.features import sorted_label
+
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -941,10 +943,9 @@ def label_tf(inp, channel=0, **label_args):
             [ 0.,  2.,  0.],
             [ 3.,  0.,  0.]]])
     """
-    from scipy.ndimage import label
     def batch_label(x):
         return np.expand_dims(
-            np.stack([label(cx[..., channel], **label_args)[0]
+            np.stack([sorted_label(cx[..., channel], **label_args)
                       for cx in x], 0), -1)
 
     with tf.name_scope('label_2d'):
@@ -1005,7 +1006,6 @@ def batch_label_time(in_batch, channel, time_steps, channel_thresh=0.5,
        [ 0.  0.  0.]
        [ 1.  0.  0.]]]]
     """
-    from scipy.ndimage import label
     assert len(in_batch.shape) == 4, "Expected 4D input"
     batch_size, x_wid, y_wid, channels = in_batch.shape
     out_batch = np.zeros((batch_size, time_steps, x_wid, y_wid, 1),
@@ -1074,7 +1074,6 @@ def batch_label_time_zoom(in_batch,
                           zoom_order=3,
                           **label_args):
     """
-
     :param in_batch:
     :param channel:
     :param time_steps:
@@ -1125,14 +1124,14 @@ def batch_label_time_zoom(in_batch,
       [ 0.  0.  0.]
       [ 0.  0.  0.]]]
     """
-    from scipy.ndimage import label, zoom
+    from scipy.ndimage import zoom
 
     assert len(in_batch.shape) == 4, "Expected 4D input"
     batch_size, _, _, channels = in_batch.shape
     out_batch = np.zeros((batch_size, time_steps, x_size, y_size, channels),
                          dtype=np.float32)
     for i, c_img in enumerate(in_batch):
-        c_label = label(c_img[..., channel] > channel_thresh, **label_args)[0]
+        c_label = sorted_label(c_img[..., channel] > channel_thresh, **label_args)
         for j in range(time_steps):
             # don't include j=0
             c_bbox = get_bbox(c_label == (j + 1))
