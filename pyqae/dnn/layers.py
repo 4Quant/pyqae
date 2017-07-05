@@ -904,3 +904,149 @@ def gkern_tf(d=2, kernlen=21, nsigs=3, norm=True):
         if norm:
             kernel_raw = kernel_raw / tf.reduce_sum(kernel_raw)
         return kernel_raw
+
+
+def label_tf(inp, channel = 0, **label_args):
+    """
+    Connected component labeling as a tensorflow op maps from a black and
+    white image to a image with integer specifying components
+    :param channel:
+    :param label_args:
+    :return:
+    >>> label_tf(tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 1)))
+    <tf.Tensor 'label_2d/scipy_label:0' shape=<unknown> dtype=int32>
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
+    >>> _setup_and_test(label_tf, s_eye, round = True).squeeze()
+    setup_net [(1, 3, 3, 1)] <unknown>
+    array([[ 1.,  0.,  0.],
+           [ 0.,  2.,  0.],
+           [ 0.,  0.,  3.]])
+    >>> s_eye[0,1,1,0] = 0
+    >>> _setup_and_test(label_tf, s_eye, round = True).squeeze()
+    setup_net [(1, 3, 3, 1)] <unknown>
+    array([[ 1.,  0.,  0.],
+           [ 0.,  0.,  0.],
+           [ 0.,  0.,  2.]])
+    >>> s_eye2 = np.expand_dims(np.expand_dims(np.eye(3)[::-1],0),-1)
+    >>> s_full = np.concatenate([s_eye, s_eye2],0) # check two different batch
+    >>> _setup_and_test(label_tf, s_full, round = True).squeeze()
+    setup_net [(2, 3, 3, 1)] <unknown>
+    array([[[ 1.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 0.,  0.,  2.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  1.],
+            [ 0.,  2.,  0.],
+            [ 3.,  0.,  0.]]])
+    """
+    from scipy.ndimage import label
+    def batch_label(x):
+        return np.expand_dims(
+            np.stack([label(cx[...,channel], **label_args)[0]
+                                     for cx in x],0),-1)
+    with tf.name_scope('label_2d'):
+        return tf.py_func(batch_label, [inp], tf.int32, name = 'scipy_label')
+
+def batch_label_time(in_batch, channel, time_steps, **label_args):
+    # type: (np.ndarray) -> np.ndarray
+    """
+    Takes an input and transforms the results into a time series of
+    connected component labels
+    :param in_batch:
+    :param channel:
+    :param time_steps:
+    :param label_args:
+    :return:
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
+    >>> pprint(batch_label_time(s_eye, 0, 3).squeeze())
+    [[[ 1.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  0.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  1.  0.]
+      [ 0.  0.  0.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  1.]]]
+    >>> s_eye2 = np.expand_dims(np.expand_dims(np.eye(3)[::-1],0),-1)
+    >>> pprint(batch_label_time(np.concatenate([s_eye, s_eye2],0), 0, 3).squeeze())
+    [[[[ 1.  0.  0.]
+       [ 0.  0.  0.]
+       [ 0.  0.  0.]]
+    <BLANKLINE>
+      [[ 0.  0.  0.]
+       [ 0.  1.  0.]
+       [ 0.  0.  0.]]
+    <BLANKLINE>
+      [[ 0.  0.  0.]
+       [ 0.  0.  0.]
+       [ 0.  0.  1.]]]
+    <BLANKLINE>
+    <BLANKLINE>
+     [[[ 0.  0.  1.]
+       [ 0.  0.  0.]
+       [ 0.  0.  0.]]
+    <BLANKLINE>
+      [[ 0.  0.  0.]
+       [ 0.  1.  0.]
+       [ 0.  0.  0.]]
+    <BLANKLINE>
+      [[ 0.  0.  0.]
+       [ 0.  0.  0.]
+       [ 1.  0.  0.]]]]
+    """
+    from scipy.ndimage import label
+    assert len(in_batch.shape)==4, "Expected 4D input"
+    batch_size, x_wid, y_wid, channels = in_batch.shape
+    out_batch = np.zeros((batch_size, time_steps, x_wid, y_wid, 1),
+                         dtype = np.float32)
+    for i, c_img in enumerate(in_batch):
+        c_label = label(c_img[..., channel], **label_args)[0]
+        for j in range(time_steps):
+            out_batch[i, j, :, :, 0] = (c_label == (j+1)) # don't include j=0
+    return out_batch
+
+def label_2d_to_time(inp, channel = 0, time_steps = 5, **label_args):
+    """
+    Takes an input image, calculates the connected component labels and then
+    returns each component as a time-step
+    :param inp: image (batch_size, x_wid, y_wid, channels)
+    :param channel: channel to use for CCL
+    :param time_steps: number of labels to process
+    :param time_steps: number of time steps
+    :return:
+    >>> x = tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 1))
+    >>> label_2d_to_time(x, 0, 3)
+    <tf.Tensor 'label_2d_to_time/scipy_batch_label:0' shape=<unknown> dtype=float32>
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
+    >>> _setup_and_test(label_2d_to_time, s_eye, round = True).squeeze()
+    setup_net [(1, 3, 3, 1)] <unknown>
+    array([[[ 1.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 0.,  0.,  0.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  0.],
+            [ 0.,  1.,  0.],
+            [ 0.,  0.,  0.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 0.,  0.,  1.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 0.,  0.,  0.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 0.,  0.,  0.]]])
+    """
+    with tf.name_scope('label_2d_to_time'):
+        return tf.py_func(lambda x: batch_label_time(x, channel=channel,
+                                                     time_steps=time_steps,
+                                                     **label_args),
+                          [inp],
+                          tf.float32,
+                          name='scipy_batch_label')
