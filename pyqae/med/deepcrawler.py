@@ -25,7 +25,7 @@ import hashlib
 
 def hash_path(path):
     """
-
+    For keeping track of paths we have already completed
     :param path:
     :return:
     >>> assert len(hash_path('/dir/md/bob'))<255

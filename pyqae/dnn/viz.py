@@ -1,7 +1,11 @@
 from __future__ import absolute_import, division, print_function
 
 import keras.backend as K
-import keras.utils.visualize_util as vu
+try:
+    import keras.utils.visualize_util as vu
+except ImportError:
+    import keras.utils.vis_utils as vu
+
 import matplotlib.cm as cm
 import numpy as np  # linear algebra / matrices
 from IPython.display import SVG
