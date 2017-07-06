@@ -72,8 +72,10 @@ def vread_dicom_tags(f_path, f_data):
     return dict(dcm_list + [('path', f_path)])
 
 
-def recursive_walk_path(base_path, ext, only_first=False, verbose=False):
-    # type: (str, str, bool) -> List[Tuple[str, str]]
+def recursive_walk_path(base_path,
+                        ext,
+                        only_first=False, verbose=False):
+    # type: (str, str, bool, bool) -> List[Tuple[str, str]]
     """
     Recursively browse a path and extract files which meet a criteria
     :param base_path:
@@ -178,7 +180,7 @@ DEFAULT_READERS = {'tar': read_tar_tags, 'dcm': read_dicom_tags}
 DEFAULT_WALK_ARGS = [('tar', False), ('dcm', True)]
 
 
-def extract_files(in_paths,  # type: Union[List[str],str[
+def extract_files(in_paths,  # type: Union[List[str],str]
                   walk_args=None,  # type: Optional[List[Tuple[str,bool]]]
                   walk_readers=None,
                   # type: Optional[Dict[str,Callable[[str],Any]]]

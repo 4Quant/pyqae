@@ -7,8 +7,9 @@ from sklearn.feature_extraction.image import extract_patches
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 
 
-def sorted_label(in_img, **kwargs):
-    # type: (np.ndarray) -> np.ndarray
+def sorted_label(in_img, # type: np.ndarray
+                 **kwargs):
+    # type: (...) -> np.ndarray
     """
     Return labeled image in a sorted manner by area (in 2D, length in 1D and volume in 3D)
     :param in_img:

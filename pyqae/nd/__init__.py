@@ -74,7 +74,7 @@ def meshgridnd_like(in_img,
 
 
 def filt_tensor(image_stack,  # type: ndarray
-                filter_op,  # type: (ndarray) -> ndarray
+                filter_op,  # type: Callable[np.ndarray, np.ndarray]
                 tile_size=(128, 128),
                 padding=(0, 0),
                 *filter_args,
@@ -114,9 +114,9 @@ def filt_tensor(image_stack,  # type: ndarray
 
 
 def tensor_from_rdd(in_rdd,  # type: RDD
-                    extract_array=lambda x: x[1],  # type: (Any) -> ndarray
-                    sort_func=None,  # type: Optional[(Any) -> int]
-                    make_idx=None  # type: Optional[(Any) -> int]
+                    extract_array=lambda x: x[1],  # type: Callable[Any, ndarray]
+                    sort_func=None,  # type: Optional[Callable[Any,int]]
+                    make_idx=None  # type: Optional[Callable[Any,int]]
                     ):
     """
     Create a tensor object from an RDD of images
@@ -225,7 +225,7 @@ def save_tensor_parquet(in_bolt_array, out_path):
 def _dsum(carr,  # type: np.ndarray
           cax  # type: int
           ):
-    # type: (np.ndarray, int) -> np.ndarray
+    # type: (...) -> np.ndarray
     """
     Sums the values along all other axes but the current
     :param carr:
@@ -424,7 +424,7 @@ def replace_labels_with_bbox(in_labels, def_box = [20, 20, 20]):
             c_box = get_bbox(in_labels==idx)
             if def_box:
                 c_box = stretch_bbox(c_box, def_box)
-            new_labels[[slice(*ibox,1) for ibox in c_box]] = idx
+            new_labels[[slice(*ibox,1) for ibox in c_box]] = idx # type: ignore
     return new_labels
 
 
@@ -455,7 +455,7 @@ from scipy.ndimage import zoom
 def iso_image_rescaler(t_array,  # type: np.ndarray
                        gs_arr,  # type: List[float]
                        res_func=lambda x: np.max(x),
-                       # type: (np.ndarray) -> float
+                       # type: Callable[np.ndarray,float]
                        order=0,
                        verbose=False,
                        **kwargs):

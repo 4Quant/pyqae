@@ -272,8 +272,10 @@ def PhiComGrid2DLayer(z_rad,
                   **args)
 
 
-def CCLTimeLayer(channel, time_steps, **args):
-    # type: (int, int) -> keras.layers.Layer
+def CCLTimeLayer(channel, # type: int
+                 time_steps, # type: int
+                 **args):
+    # type: (...) -> keras.layers.Layer
     """
     A connected component time layer
     :param channel:
@@ -335,8 +337,12 @@ def CCLTimeLayer(channel, time_steps, **args):
                   **args)
 
 
-def CCLTimeZoomLayer(channel, time_steps, x_size, y_size, **args):
-    # type: (int, int, int, int) -> keras.layers.Layer
+def CCLTimeZoomLayer(channel, # type: int
+                     time_steps, # type: int
+                     x_size, # type: int
+                     y_size, # type: int
+                     **args):
+    # type: (...) -> keras.layers.Layer
     """
     A connected component time layer
     :param channel:

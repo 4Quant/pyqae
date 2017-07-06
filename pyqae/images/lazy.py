@@ -246,7 +246,7 @@ def parallel_tile_image(paths, # type: Union[List[str], RDD[str]]
                          tile_w = 512,
                          tile_h = None, # type: Optional[int]
                          **kwargs):
-    # type: (...) -> RDD[Tuple(int, int, int), np.ndarray], List[int]]
+    # type: (...) -> Tuple[RDD[Tuple[int, int, int], np.ndarray], List[int]]
     """
     A function to read tiles in in parallel
     :param paths: a list of paths to read from
@@ -279,7 +279,7 @@ def parallel_tile_namedimage(paths, # type: Union[List[str], RDD[str]]
                          tile_w = 512,
                          tile_h = None, # type: Optional[int]
                          **kwargs):
-    # type: (...) -> Tuple[RDD[Tuple(str, int, int), np.ndarray], List[int]]
+    # type: (...) -> Tuple[RDD[Tuple[str, int, int], np.ndarray], List[int]]
     """
     A function to read tiles in in parallel
     :param paths: a list of paths to read from
@@ -343,7 +343,7 @@ def create_z_projection(tile_rdd, # type: RDD[Tuple[Tuple[str, int, int],np.ndar
                         tile_size,
                         out_image_name = 'mip',
                         agg_func = np.max):
-    # type: RDD[Tuple[Tuple[str, int, int],np.ndarray]]
+    # type: (...) -> RDD[Tuple[Tuple[str, int, int],np.ndarray]]
     """
     A function to create a Z projection through a stack of tiles
     :param tile_rdd:  the input stack
@@ -387,7 +387,7 @@ def single_chunky_image(in_ds,
                         tile_size=(256, 256),
                         padding=(0, 0)):
     in_rdd = context.parallelize([((0,), in_ds)])
-    return ChunkedArray(in_rdd, # type: RDD[(int, np.ndarray)]
+    return ChunkedArray(in_rdd, # type - RDD[(int, np.ndarray)]
                         shape=(in_rdd.count(),) + in_ds.size,
                         split=1,
                         dtype=in_ds[0, 0].dtype

@@ -394,7 +394,6 @@ def _get_spacing_np(in_data):
     :param in_data:
     :return:
     """
-    # type: (sitk.Image) -> List[float]
     gs = tuple(in_data.GetSpacing())
     if len(gs) == 3:
         gs = gs[2], gs[0], gs[1]

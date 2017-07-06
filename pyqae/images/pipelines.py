@@ -301,7 +301,7 @@ class ChannelPipeTransform(ParameterFreeTransform):
     """
 
     def __init__(self,
-                 channel_fcn,  # type:
+                 channel_fcn,  # type: Callable[np.ndarray, np.ndarray]
                  use_generator,  # type: bool
                  dim_order,  # type: Optional[str]
                  fit_fcn=lambda x, y: None
@@ -702,12 +702,13 @@ import matplotlib.pyplot as plt
 from skimage.util.montage import montage2d
 
 
-def visualize_pipeline(c_pipe, input_data,
+def visualize_pipeline(c_pipe, # type: Pipeline
+                       input_data, # type: np.ndarray
                        verbose=False,
                        normalize=True,
                        show_shape=True,
                        max_bars=256):
-    # type: (Pipeline,  np.ndarray) -> plt.Figure
+    # type: (...) -> plt.Figure
     """
     Show the full pipeline and results
     :param c_pipe:

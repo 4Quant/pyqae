@@ -17,9 +17,10 @@ def setup_environment():
 
 
 def build_kr_model(in_model_fcn):
-    model = KerasRegressor(build_fn=in_model_fcn, nb_epoch=5,
+    model = KerasRegressor(build_fn=in_model_fcn,
+                           nb_epoch=5,
                            batch_size=20,
-                           verbose=2,  # type: Union[2, bool]
+                           verbose=2,
                            shuffle=True)
     lrs = [0.5, 1e-2]
     decays = [1e-6]

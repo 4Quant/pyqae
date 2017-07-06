@@ -412,11 +412,12 @@ def spatial_gradient_2d_tf(in_img):
         return (0.5 * dx_img, 0.5 * dy_img)
 
 
-def phi_coord_3d_tf(r_img, z_rad=0.0,
+def phi_coord_3d_tf(r_img, # type: tf.Tensor
+                    z_rad=0.0,
                     include_r=False,
                     include_ir=False,
                     ir_smooth=1e-2):
-    # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
+    # type: (...) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
     derivatives and arc-sin to create smooth functions
@@ -472,12 +473,12 @@ def phi_coord_3d_tf(r_img, z_rad=0.0,
         return tf.concat(out_vec, -1)
 
 
-def phi_coord_2d_tf(r_img,
+def phi_coord_2d_tf(r_img, # type: tf.Tensor
                     z_rad=0.0,
                     include_r=False,
                     include_ir=False,
                     ir_smooth=1e-2):
-    # type: (tf.Tensor, float, bool, bool) -> tf.Tensor
+    # type: (...) -> tf.Tensor
     """
     Calculate the phi coordinates for tensors using a single step
     derivatives and arc-sin to create smooth functions for 2d cases
@@ -569,14 +570,14 @@ def add_com_phi_grid_3d_tf(in_layer,
             return phi_out
 
 
-def add_com_phi_grid_2d_tf(in_layer,
+def add_com_phi_grid_2d_tf(in_layer, # type: tf.Tensor
                            layer_concat=False,
                            z_rad=0.0,
                            include_r=False,
                            include_ir=False,
                            r_scale=1.0
                            ):
-    # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
+    # type: (...) -> tf.Tensor
     """
     Adds spatial phi grids to 2d images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
@@ -627,8 +628,12 @@ def obj_to_phi_np(seg_img, z_rad=0):
                                  zrad=z_rad)
 
 
-def generate_phi_coord_np(seg_img, centroid, std_xyz=[1, 1, 1], z_rad=0):
-    # type: (np.ndarray, Tuple[float, float, float], float) -> np.ndarray
+def generate_phi_coord_np(seg_img, # type: np.ndarray
+                          centroid, # type: Tuple[float, float, float]
+                          std_xyz=[1, 1, 1], # type: Tuple[float, float, float]
+                          z_rad=0 # type: float
+                          ):
+    # type: (...) -> np.ndarray
     """
     Create the phi coordinate system
     :param seg_img:
@@ -955,9 +960,12 @@ def label_tf(inp, channel=0, **label_args):
         return y
 
 
-def batch_label_time(in_batch, channel, time_steps, channel_thresh=0.5,
+def batch_label_time(in_batch, # type: np.ndarray
+                     channel, # type: int
+                     time_steps, # type: int
+                     channel_thresh=0.5,
                      **label_args):
-    # type: (np.ndarray) -> np.ndarray
+    # type: (...) -> np.ndarray
     """
     Takes an input and transforms the results into a time series of
     connected component labels
