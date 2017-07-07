@@ -15,7 +15,7 @@ from keras.models import Sequential
 from pyqae.dnn.layers import add_com_phi_grid_2d_tf
 from pyqae.dnn.layers import add_com_phi_grid_3d_tf
 from pyqae.dnn.layers import gkern_nd, gkern_tf
-from pyqae.dnn.layers import label_2d_to_time_tf, label_time_zoom_tf
+from pyqae.dnn.layers import label_2d_to_time_tf, label_time_zoom_tf, slic_2d_to_time_tf
 from pyqae.utils import pprint, \
     get_error  # noinspection PyUnresolvedReferences
 
@@ -407,6 +407,81 @@ def CCLTimeZoomLayer(channel, # type: int
 
     return Lambda(lay_func,
                   **args)
+
+
+def SLICTimeChannel(time_steps, # type: int
+                    name = None,
+                    input_shape = None,
+                     **slic_args):
+    # type: (...) -> keras.layers.Layer
+    """
+    A SLIC time layer
+    :param time_steps:
+    :param args: layer (Lambda) arguments like name
+    :return:
+    >>> m_model = Sequential()
+    >>> m_model.add(SLICTimeChannel(4, input_shape=(3, 3, 1), name='SLIC'))
+    >>> m_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    SLIC (Lambda)                (None, 4, 3, 3, 1)        0
+    =================================================================
+    Total params: 0
+    Trainable params: 0
+    Non-trainable params: 0
+    _________________________________________________________________
+    >>> X_vec = np.ones((1, 3, 3, 1))
+    >>> out_res = m_model.predict(X_vec)
+    >>> out_res.shape
+    (1, 4, 3, 3, 1)
+    >>> pprint(out_res.squeeze())
+    [[[ 1.  1.  0.]
+      [ 1.  1.  0.]
+      [ 0.  0.  0.]]
+    <BLANKLINE>
+     [[ 0.  0.  1.]
+      [ 0.  0.  1.]
+      [ 0.  0.  0.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 1.  1.  0.]]
+    <BLANKLINE>
+     [[ 0.  0.  0.]
+      [ 0.  0.  0.]
+      [ 0.  0.  1.]]]
+    >>> m_model.add(Flatten())
+    >>> m_model.add(Dense(1))
+    >>> m_model.compile(optimizer='sgd', loss = 'mse') # should be trainable
+    >>> _ = m_model.fit(x=X_vec, y=np.ones((1,1)), epochs=1, verbose=False)
+    >>> n_model = Sequential()
+    >>> n_model.add(Conv2D(1, kernel_size=(1,1), name = 'C2D', input_shape = (3, 3, 1)))
+    >>> n_model.add(m_model)
+    >>> n_model.summary() # doctest: +NORMALIZE_WHITESPACE
+    _________________________________________________________________
+    Layer (type)                 Output Shape              Param #
+    =================================================================
+    C2D (Conv2D)                 (None, 3, 3, 1)           2
+    _________________________________________________________________
+    sequential_8 (Sequential)    (None, 1)                 37
+    =================================================================
+    Total params: 39
+    Trainable params: 39
+    Non-trainable params: 0
+    _________________________________________________________________
+    >>> n_model.compile(optimizer='sgd', loss = 'mse') # shouldn't be trainable
+    >>> get_error(n_model.fit,x=X_vec, y=np.ones((1,1)))
+    'None values not supported.'
+    """
+    lay_func = lambda x: slic_2d_to_time_tf(x,
+                                            time_steps=time_steps,
+                                            **slic_args
+                                            )
+    lamb_args = {}
+    if input_shape is not None: lamb_args['input_shape'] = input_shape
+    if name is not None: lamb_args['name'] = name
+    return Lambda(lay_func, **lamb_args)
 
 
 def get_diff_vecs(vec_count, loop=True):

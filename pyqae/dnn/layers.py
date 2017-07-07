@@ -7,6 +7,7 @@ from scipy.ndimage import label
 from pyqae.nd import meshgridnd_like, get_bbox, apply_bbox
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 from pyqae.nd.features import sorted_label
+from pyqae.dnn.superpixels import batch_slic_time
 
 
 __doc__ = """
@@ -1072,6 +1073,179 @@ def label_2d_to_time_tf(inp, channel=0, time_steps=5, **label_args):
         y.set_shape([new_shape[0], time_steps, new_shape[1], new_shape[2], 1])
         return y
 
+
+def slic_2d_to_time_tf(inp,
+                       time_steps=5,
+                       include_mask = False,
+                    include_channels = True,
+                       **batch_slic_args):
+    """
+    Takes an input image, calculates the connected component labels and then
+    returns each component as a time-step
+    :param inp: image (batch_size, x_wid, y_wid, channels)
+    :param time_steps: number of labels to process
+    :param batch_slic_args: arguments for pyqae.dnn.superpixels.batch_slic_time
+    :return:
+    >>> x = tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 1))
+    >>> slic_2d_to_time_tf(x, 4)
+    <tf.Tensor 'slic_2d_to_time/skimage_batch_slic:0' shape=(1, 4, 2, 3, 1) dtype=float32>
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
+    >>> f = lambda x: slic_2d_to_time_tf(x, 4, include_mask = True,include_channels=False)
+    >>> _setup_and_test(f, s_eye, round = True).squeeze()
+    setup_net [(1, 3, 3, 1)] (1, 4, 3, 3, 1)
+    array([[[ 1.,  1.,  0.],
+            [ 1.,  1.,  0.],
+            [ 0.,  0.,  0.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  1.],
+            [ 0.,  0.,  1.],
+            [ 0.,  0.,  0.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 1.,  1.,  0.]],
+    <BLANKLINE>
+           [[ 0.,  0.,  0.],
+            [ 0.,  0.,  0.],
+            [ 0.,  0.,  1.]]])
+    >>> f = lambda x: slic_2d_to_time_tf(x, 4, include_mask = True,include_channels=True)
+    >>> _setup_and_test(f, s_eye, round = True).squeeze()
+    setup_net [(1, 3, 3, 1)] (1, 4, 3, 3, 2)
+    array([[[[ 1.,  1.],
+             [ 1.,  0.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 1.,  0.],
+             [ 1.,  1.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.],
+             [ 0.,  0.]]],
+    <BLANKLINE>
+    <BLANKLINE>
+           [[[ 0.,  0.],
+             [ 0.,  0.],
+             [ 1.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.],
+             [ 1.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.],
+             [ 0.,  0.]]],
+    <BLANKLINE>
+    <BLANKLINE>
+           [[[ 0.,  0.],
+             [ 0.,  0.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 1.,  0.],
+             [ 1.,  0.],
+             [ 0.,  0.]]],
+    <BLANKLINE>
+    <BLANKLINE>
+           [[[ 0.,  0.],
+             [ 0.,  0.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.],
+             [ 0.,  0.]],
+    <BLANKLINE>
+            [[ 0.,  0.],
+             [ 0.,  0.],
+             [ 1.,  1.]]]])
+    """
+    with tf.name_scope('slic_2d_to_time'):
+        y = tf.py_func(lambda x: batch_slic_time(x,
+                                                  time_steps=time_steps,
+                                                 include_channels = include_channels,
+                                                 include_mask = include_mask,
+                                                  **batch_slic_args),
+                       [inp],
+                       tf.float32,
+                       name='skimage_batch_slic')
+        new_shape = inp.get_shape()
+        out_channels = new_shape[3] if include_channels else 0
+        if include_mask:
+            out_channels = out_channels + 1
+        y.set_shape([new_shape[0], time_steps, new_shape[1],
+                     new_shape[2], out_channels])
+        return y
+
+def label_average_features_tf(img_data, label_segs):
+    # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
+    """
+    Summarize the values over labels
+
+    :param img_data: the image data as (batch, x, y, ch)
+    :param label_segs: the segmentation data as (batch, seg, x, y, ch)
+    :return:
+    >>> img = tf.placeholder(dtype = tf.float32, shape = (1, 2, 3, 4))
+    >>> labels = tf.placeholder(dtype = tf.float32, shape = (1, 5, 2, 3, 1))
+    >>> label_average_features_tf(img, labels)
+    <tf.Tensor 'label_summary/label_average/truediv:0' shape=(1, 5, 4) dtype=float32>
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
+    >>> s_eye_s = np.stack([s_eye]*4, 1)
+    >>> (s_eye.shape, s_eye_s.shape)
+    ((1, 3, 3, 1), (1, 4, 3, 3, 1))
+    >>> _setup_and_test(label_average_features_tf, s_eye, s_eye_s, round = True)
+    setup_net [(1, 3, 3, 1), (1, 4, 3, 3, 1)] (1, 4, ?)
+    array([[[ 1.],
+            [ 1.],
+            [ 1.],
+            [ 1.]]])
+    """
+
+    with tf.name_scope('label_summary'):
+        f_img_data = tf.tile(tf.expand_dims(img_data, 1),
+                             [1, tf.shape(label_segs)[1], 1, 1, 1])
+        f_slic_segs = tf.tile(label_segs, [1, 1, 1, 1, tf.shape(img_data)[3]])
+        with tf.name_scope('label_average'):
+            return tf.reduce_sum(f_img_data * f_slic_segs,
+                                 [2, 3]) / tf.reduce_sum(f_slic_segs, [2, 3])
+
+def features_to_label_tf(feature_data, label_data):
+    # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
+    """
+    Turn feature maps into an output image
+    :param in_vec:
+    :return:
+    >>> features = tf.placeholder(dtype = tf.float32, shape = (9, 5, 7))
+    >>> labels = tf.placeholder(dtype = tf.float32, shape = (9, 5, 2, 3, 1))
+    >>> features_to_label_tf(features, labels)
+    <tf.Tensor 'expand_features/combine_weights/Max:0' shape=(9, 2, 3, 7) dtype=float32>
+    >>> s_eye = np.expand_dims(np.expand_dims(np.eye(3),0),-1)
+    >>> s_eye_s = np.stack([s_eye]*4, 1)
+    >>> f_map = np.arange(24).reshape((1,4,6))
+    >>> (f_map.shape, s_eye_s.shape)
+    ((1, 4, 6), (1, 4, 3, 3, 1))
+    >>> _setup_and_test(features_to_label_tf, f_map, s_eye_s, round = True)
+    setup_net [(1, 4, 6), (1, 4, 3, 3, 1)] (1, 3, 3, 6)
+    array([[[[ 18.,  19.,  20.,  21.,  22.,  23.],
+             [  0.,   0.,   0.,   0.,   0.,   0.],
+             [  0.,   0.,   0.,   0.,   0.,   0.]],
+    <BLANKLINE>
+            [[  0.,   0.,   0.,   0.,   0.,   0.],
+             [ 18.,  19.,  20.,  21.,  22.,  23.],
+             [  0.,   0.,   0.,   0.,   0.,   0.]],
+    <BLANKLINE>
+            [[  0.,   0.,   0.,   0.,   0.,   0.],
+             [  0.,   0.,   0.,   0.,   0.,   0.],
+             [ 18.,  19.,  20.,  21.,  22.,  23.]]]])
+    """
+    with tf.name_scope('expand_features'):
+        wide_features = tf.expand_dims(tf.expand_dims(feature_data,2),2)
+        f_features = tf.tile(wide_features, [1, 1, tf.shape(label_data)[2], tf.shape(label_data)[3], 1])
+        f_labels = tf.tile(label_data, [1, 1, 1, 1, tf.shape(feature_data)[2]])
+        with tf.name_scope('combine_weights'):
+             return tf.reduce_max(f_features*f_labels,[1])
 
 def batch_label_time_zoom(in_batch,
                           channel,
