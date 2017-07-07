@@ -1208,8 +1208,9 @@ def label_average_features_tf(img_data, label_segs):
                              [1, tf.shape(label_segs)[1], 1, 1, 1])
         f_slic_segs = tf.tile(label_segs, [1, 1, 1, 1, tf.shape(img_data)[3]])
         with tf.name_scope('label_average'):
-            return tf.reduce_sum(f_img_data * f_slic_segs,
-                                 [2, 3]) / tf.reduce_sum(f_slic_segs, [2, 3])
+            out_pix = tf.clip_by_value(tf.reduce_sum(f_slic_segs, [2, 3]), 1,
+                                       tf.float32.max)
+            return tf.reduce_sum(f_img_data * f_slic_segs, [2, 3]) / out_pix
 
 def features_to_label_tf(feature_data, label_data):
     # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
