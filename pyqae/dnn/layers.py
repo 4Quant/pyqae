@@ -159,7 +159,8 @@ def add_simple_grid_tf(in_layer,  # type: tf.Tensor
 
 def add_com_grid_3d_tf(in_layer,
                        layer_concat=False,
-                       as_r_vec=False
+                       as_r_vec=False,
+                       r_scale = 1.0
                        ):
     # type: (tf.Tensor, bool, bool) -> tf.Tensor
     """
@@ -170,6 +171,8 @@ def add_com_grid_3d_tf(in_layer,
 
     :param in_layer:
     :param layer_concat:
+    :param as_r_vec:
+    :param r_scale: the scale factor for the r axis
     :return:
     >>> _testimg = np.ones((5, 4, 3, 2, 1))
     >>> out_img = _setup_and_test(add_com_grid_3d_tf, _testimg)
@@ -227,8 +230,9 @@ def add_com_grid_3d_tf(in_layer,
             sd_matlist = [res_op(c_var) for c_var in sd_list]
 
         with tf.variable_scope('make_grid'):
-            out_var = [(tf.reshape(c_var, (
-                batch_size, xg_wid, yg_wid, zg_wid, 1)) - c_sm) / c_sd
+            out_var = [(tf.reshape(c_var,
+                                   (batch_size, xg_wid, yg_wid, zg_wid, 1))
+                        - c_sm) / (r_scale*c_sd)
                        for c_var, c_sm, c_sd in zip(svar_list, sm_matlist,
                                                     sd_matlist)]
 
@@ -536,7 +540,8 @@ def add_com_phi_grid_3d_tf(in_layer,
                            layer_concat=False,
                            z_rad=0.0,
                            include_r=False,
-                           include_ir=False
+                           include_ir=False,
+                           r_scale = 1.0
                            ):
     # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
     """
@@ -548,6 +553,7 @@ def add_com_phi_grid_3d_tf(in_layer,
     :param layer_concat:
     :param z_rad: minimum radius to include
     :param include_r: include the radius channel
+    :param r_scale: the scale factor for the r axis
     :return:
     >>> _testimg = np.ones((5, 4, 3, 2, 1))
     >>> out_img = _setup_and_test(add_com_phi_grid_3d_tf, _testimg)
@@ -562,7 +568,10 @@ def add_com_phi_grid_3d_tf(in_layer,
     [ 0.  0.]
     """
     with tf.variable_scope('add_com_phi_grid_3d'):
-        r_vec = add_com_grid_3d_tf(in_layer, layer_concat=False, as_r_vec=True)
+        r_vec = add_com_grid_3d_tf(in_layer,
+                                   layer_concat=False,
+                                   as_r_vec=True,
+                                   r_scale=r_scale)
         phi_out = phi_coord_3d_tf(r_vec, z_rad=z_rad, include_r=include_r,
                                   include_ir=include_ir)
         if layer_concat:

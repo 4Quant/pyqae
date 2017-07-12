@@ -26,6 +26,54 @@ models as they provide a better (fully-differentiable) representation which
 can be easier for learning and better incorporate relevant spatial features
 """
 
+import tensorflow as tf
+from warnings import warn
+from keras.layers import Input
+from keras.models import Model
+import gc
+
+class CPUFallbackModel(object):
+    """
+    The class is a wrapper for a standard Keras model which reruns the model on the CPU in the event
+    a ResourceExhausedError is raised. The behavior is useful since many
+    models are too large to fit on the GPU entirely and manually remaking
+    them is time consuming
+    """
+    def __init__(self, in_model):
+        self._model = in_model
+
+    @staticmethod
+    def build_cpu_model(in_model):
+        """
+        Rebuild the model (with identical layers and weights) on the CPU
+        :param in_model: a keras model
+        :return: a CPU-bound version of the model
+        """
+        with tf.device('/cpu:0'): # 0 is for all CPUs and does not mean core
+            input_layers = [Input(batch_shape=in_model.get_input_shape_at(i))
+                            for i, _ in enumerate(in_model.inputs)]
+            out_layers = in_model(input_layers)
+            temp_model = Model(inputs=input_layers, outputs=out_layers,
+                               name='CPUBoundModel_{}'.format(in_model.name))
+        return temp_model
+
+    def __getattr__(self, attr_name):
+        orig_attr = getattr(self._model, attr_name)
+        if callable(orig_attr):
+            std_method = orig_attr
+
+            def cpu_option_method(*args, **kwargs):
+                try:
+                    return std_method(*args, **kwargs)
+                except tf.errors.ResourceExhaustedError as ree:
+                    warn("Resource Exhausted on GPU, trying CPU: {}".format(
+                        ree), RuntimeWarning)
+                    temp_model = CPUFallbackModel.build_cpu_model(self._model)
+                    return getattr(temp_model, attr_name)(*args, **kwargs)
+
+            return cpu_option_method
+        else:
+            return orig_attr
 
 def mask_net_3d(ishape,
                 # type: Tuple[Optional[int], Optional[int], Optional[int], int]
@@ -172,12 +220,15 @@ def GlobalSpreadAverage2D(suffix):
 def PhiComGrid3DLayer(z_rad,
                       include_r,
                       include_ir=False,
+                      r_scale = 1.0,
                       **args):
     """
     A PhiComGrid layer based on the add_com_phi_grid_3d_tf function which take
     the center of mass of the object in 3D and creates a arcsin map for the
     3 coordinates
     :param z_rad: the radius near the middle to black out (force 0)
+    :param r_scale: the scale for the r axis
+    :param include_ir: include the inverse of the radius
     :param args:
     :return:
     >>> from keras.models import Sequential
@@ -210,7 +261,8 @@ def PhiComGrid3DLayer(z_rad,
     return Lambda(lambda x: add_com_phi_grid_3d_tf(x,
                                                    z_rad=z_rad,
                                                    include_r=include_r,
-                                                   include_ir=include_ir),
+                                                   include_ir=include_ir,
+                                                   r_scale = r_scale),
                   **args)
 
 

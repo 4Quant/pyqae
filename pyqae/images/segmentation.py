@@ -1,6 +1,7 @@
 import numpy as np
 
 from pyqae.nd import meshgridnd_like
+from pyqae.utils import pprint, get_error  # noinspection PyUnresolvedReferences
 
 """
 The segmentation tools which are commonly used for a large number of different applications and thus part of the core PYQAE framework
@@ -118,9 +119,23 @@ from skimage.morphology import convex_hull as ch
 
 def convex_hull_slice(in_img):
     # type: (np.ndarray) -> np.ndarray
+    """
+    A safe version of convex-hull that can be used on empty images
+    :param in_img:
+    :return:
+    >>> pprint(convex_hull_slice(np.eye(3)))
+    [[ True False False]
+     [False  True False]
+     [False False  True]]
+    >>> pprint(convex_hull_slice(np.zeros((3,3))))
+    [[ 0.  0.  0.]
+     [ 0.  0.  0.]
+     [ 0.  0.  0.]]
+    >>> get_error(ch.convex_hull_image,image = np.zeros((3,3)))
+    'No points given'
+    """
     if in_img.max() == 0:
         return in_img
-
     try:
         return ch.convex_hull_image(in_img)
     except ValueError:
@@ -130,5 +145,47 @@ def convex_hull_slice(in_img):
 
 def convex_hull_3d(in_img):
     # type: (np.ndarray) -> np.ndarray
+    """
+    A slice-based 3D implementation of convex-hull
+    :param in_img:
+    :return:
+    >>> t_image = np.stack([np.eye(3), 1-np.eye(3)],0).astype(int)
+    >>> pprint(convex_hull_3d(t_image))
+    [[[ True False False]
+      [False  True False]
+      [False False  True]]
+    <BLANKLINE>
+     [[False  True  True]
+      [ True  True  True]
+      [ True  True False]]]
+    """
     return np.stack([convex_hull_slice(np.array(c_slice > 0)) for c_slice in
                      in_img])
+
+from skimage.segmentation import clear_border
+
+def clear_border_3d(in_labels):
+    # type: (np.ndarray) -> np.ndarray
+    """
+    A 3d implementation of the clear border function
+    :param in_labels: either a binary or segmented image
+    :return: the image with clear border run on every slice
+    >>> t_image = np.stack([np.eye(3)*(i+1) for i in range(3)],0).astype(int)
+    >>> clear_border_3d(t_image).max()
+    0
+    >>> t_image[1,0,0] = 0
+    >>> t_image[1,2,2] = 0
+    >>> pprint(clear_border_3d(t_image))
+    [[[0 0 0]
+      [0 0 0]
+      [0 0 0]]
+    <BLANKLINE>
+     [[0 0 0]
+      [0 2 0]
+      [0 0 0]]
+    <BLANKLINE>
+     [[0 0 0]
+      [0 0 0]
+      [0 0 0]]]
+    """
+    return np.stack([clear_border(c_seg) for c_seg in in_labels], 0)
