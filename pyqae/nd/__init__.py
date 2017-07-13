@@ -11,9 +11,13 @@ from numpy import stack
 import os
 from skimage.io import imsave
 import warnings
-from pyqae.utils import Optional, List, Tuple, pprint # noinspection PyUnresolvedReferences
+from pyqae.utils import Optional, List, \
+    Tuple  # noinspection PyUnresolvedReferences
+from pyqae.utils import pprint, \
+    get_error  # noinspection PyUnresolvedReferences
 
-def in_nd(x,y):
+
+def in_nd(x, y):
     # type: (np.ndarray, np.ndarray) -> np.ndarray
     """
     A simple wrapper for the in1d function to work on ND data
@@ -28,7 +32,8 @@ def in_nd(x,y):
     [[False False False]
      [False  True  True]]
     """
-    return np.in1d(x.ravel(),y).reshape(x.shape)
+    return np.in1d(x.ravel(), y).reshape(x.shape)
+
 
 def meshgridnd_like(in_img,
                     rng_func=range):
@@ -114,7 +119,8 @@ def filt_tensor(image_stack,  # type: ndarray
 
 
 def tensor_from_rdd(in_rdd,  # type: RDD
-                    extract_array=lambda x: x[1],  # type: Callable[Any, ndarray]
+                    extract_array=lambda x: x[1],
+                    # type: Callable[Any, ndarray]
                     sort_func=None,  # type: Optional[Callable[Any,int]]
                     make_idx=None  # type: Optional[Callable[Any,int]]
                     ):
@@ -129,7 +135,7 @@ def tensor_from_rdd(in_rdd,  # type: RDD
     """
     in_rdd = in_rdd if sort_func is None else in_rdd.sortBy(sort_func)
     zip_rdd = in_rdd.zipWithIndex().map(lambda x: (
-    x[1], extract_array(x[0]))) if make_idx is None else in_rdd.map(
+        x[1], extract_array(x[0]))) if make_idx is None else in_rdd.map(
         lambda x: (make_idx(x), extract_array(x)))
     key, val = zip_rdd.first()
     if len(val.shape) == 2:
@@ -308,7 +314,7 @@ def apply_bbox(in_vol,  # type: np.ndarray
             a_pad = 0 if a >= 0 else -a
             b_pad = 0 if b < dim_size else b - dim_size + 1
             n_pads += [(a_pad, b_pad)]
-            n_bbox += [(a + a_pad, b + a_pad)]   # adjust the box
+            n_bbox += [(a + a_pad, b + a_pad)]  # adjust the box
         # update the volume
         in_vol = np.pad(in_vol, n_pads, mode=padding_mode)
         # update the bounding box list
@@ -386,7 +392,8 @@ def stretch_bbox(in_coords, new_widths):
     return [stretch_box(min_v, max_v, n_wid) for (min_v, max_v), n_wid in
             zip(in_coords, new_widths)]
 
-def replace_labels_with_bbox(in_labels, def_box = [20, 20, 20]):
+
+def replace_labels_with_bbox(in_labels, def_box=[20, 20, 20]):
     # type: (np.ndarray, Union[List[int], bool]) -> np.ndarray
     """
     Replaces all of the labels with a bounding or fixed size box
@@ -420,13 +427,128 @@ def replace_labels_with_bbox(in_labels, def_box = [20, 20, 20]):
     """
     new_labels = np.zeros_like(in_labels)
     for idx in np.unique(in_labels):
-        if idx>0:
-            c_box = get_bbox(in_labels==idx)
+        if idx > 0:
+            c_box = get_bbox(in_labels == idx)
             if def_box:
                 c_box = stretch_bbox(c_box, def_box)
-            new_labels[[slice(*ibox,1) for ibox in c_box]] = idx # type: ignore
+            new_labels[
+                [slice(*ibox, 1) for ibox in c_box]] = idx  # type: ignore
     return new_labels
 
+
+def force_array_dim(in_img,  # type: np.ndarray
+                    out_shape,  # type: List[Optional[int]]
+                    pad_mode='reflect',
+                    crop_mode='random',
+                    **pad_args):
+    # type: (...) -> np.ndarray
+    """
+    force the dimensions of an array by using cropping and padding
+    :param in_img:
+    :param out_shape:
+    :param pad_mode:
+    :param crop_mode:
+    :param pad_args:
+    :return:
+    >>> np.random.seed(2018)
+    >>> pprint(force_array_dim(np.eye(3), [7,7]))
+    [[ 1.  0.  0.  0.  1.  0.  0.]
+     [ 0.  1.  0.  1.  0.  1.  0.]
+     [ 0.  0.  1.  0.  0.  0.  1.]
+     [ 0.  1.  0.  1.  0.  1.  0.]
+     [ 1.  0.  0.  0.  1.  0.  0.]
+     [ 0.  1.  0.  1.  0.  1.  0.]
+     [ 0.  0.  1.  0.  0.  0.  1.]]
+    >>> pprint(force_array_dim(np.eye(3), [2,2], crop_mode = 'center'))
+    [[ 1.  0.]
+     [ 0.  1.]]
+    >>> pprint(force_array_dim(np.eye(3), [2,2], crop_mode = 'random'))
+    [[ 1.  0.]
+     [ 0.  1.]]
+    >>> pprint(force_array_dim(np.eye(3), [2,2], crop_mode = 'random'))
+    [[ 0.  0.]
+     [ 1.  0.]]
+    >>> get_error(force_array_dim, in_img = np.eye(3), out_shape = [2,2], crop_mode = 'junk')
+    'Crop mode must be random or center: junk'
+    >>> t_mat = np.ones((1, 7, 9, 3))
+    >>> o_img = force_array_dim(t_mat, [None, 12, 12, None], pad_mode = 'constant', constant_values=0)
+    >>> o_img.shape
+    (1, 12, 12, 3)
+    >>> pprint(o_img.mean())
+    0.4375
+    >>> pprint(o_img[0,3,:,0])
+    [ 0.  1.  1.  1.  1.  1.  1.  1.  1.  1.  0.  0.]
+    """
+    assert crop_mode in ['random', 'center'], "Crop mode must be random or " \
+                                              "center: {}".format(crop_mode)
+
+    pad_image = pad_nd_image(in_img, out_shape, mode=pad_mode, **pad_args)
+    crop_dims = []
+    for c_shape, d_shape in zip(pad_image.shape, out_shape):
+        cur_slice = slice(0, c_shape)  # default
+        if d_shape is not None:
+            assert d_shape <= c_shape, \
+                "Padding command failed: {}>={} - {},{}".format(d_shape,
+                                                                c_shape,
+                                                                pad_image.shape,
+                                                                out_shape
+                                                                )
+            if d_shape < c_shape:
+                if crop_mode == 'random':
+                    start_idx = np.random.choice(
+                        range(0, c_shape - d_shape + 1))
+                    cur_slice = slice(start_idx, start_idx + d_shape)
+                else:
+                    start_idx = (c_shape - d_shape) // 2
+                    cur_slice = slice(start_idx, start_idx + d_shape)
+        crop_dims += [cur_slice]
+    return pad_image.__getitem__(crop_dims)
+
+
+def pad_nd_image(in_img,  # type: np.ndarray
+                 out_shape,  # type: List[Optional[int]]
+                 mode='reflect',
+                 **kwargs):
+    # type: (...) -> np.ndarray
+    """
+    Pads an array to a specific size
+    :param in_img:
+    :param out_shape: the desired outputs hape
+    :param mode: the mode to use in numpy.pad
+    :param kwargs: arguments for numpy.pad
+    :return:
+    >>> pprint(pad_nd_image(np.eye(3), [7,7]))
+    [[ 1.  0.  0.  0.  1.  0.  0.]
+     [ 0.  1.  0.  1.  0.  1.  0.]
+     [ 0.  0.  1.  0.  0.  0.  1.]
+     [ 0.  1.  0.  1.  0.  1.  0.]
+     [ 1.  0.  0.  0.  1.  0.  0.]
+     [ 0.  1.  0.  1.  0.  1.  0.]
+     [ 0.  0.  1.  0.  0.  0.  1.]]
+    >>> pprint(pad_nd_image(np.eye(3), [2,2])) # should return the same
+    [[ 1.  0.  0.]
+     [ 0.  1.  0.]
+     [ 0.  0.  1.]]
+    >>> t_mat = np.ones((2, 27, 29, 3))
+    >>> o_img = pad_nd_image(t_mat, [None, 32, 32, None], mode = 'constant', constant_values=0)
+    >>> o_img.shape
+    (2, 32, 32, 3)
+    >>> pprint(o_img.mean())
+    0.7646484375
+    >>> pprint(o_img[0,3,:,0])
+    [ 0.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  1.
+      1.  1.  1.  1.  1.  1.  1.  1.  1.  1.  0.  0.]
+    """
+    pad_dims = []
+    for c_shape, d_shape in zip(in_img.shape, out_shape):
+        pad_before, pad_after = 0, 0
+        if d_shape is not None:
+            if c_shape < d_shape:
+                dim_diff = d_shape - c_shape
+                pad_before = dim_diff // 2
+                pad_after = dim_diff - pad_before
+        pad_dims += [(pad_before, pad_after)]
+    return np.pad(in_img, pad_dims, mode=mode, **kwargs)
 
 
 def pad_box(in_coords, in_shape, pad_width):

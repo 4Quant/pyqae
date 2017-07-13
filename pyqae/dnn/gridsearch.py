@@ -59,7 +59,7 @@ def show_results(grid_result):
     # todo append columns
     [crow.to_dict() for _, crow in pd.DataFrame(grid_result.cv_results_).iterrows()]
     print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
-    pd.DataFrame([dict([('score_mean', scores.mean()),
+    return pd.DataFrame([dict([('score_mean', scores.mean()),
                         ('score_std', scores.std())] +
                        list(params.items())) for params, mean_score, scores in grid_result.grid_scores_]).sort_values(
         'score_mean')
