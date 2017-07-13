@@ -69,7 +69,7 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     saved the constant graph (ready for inference) at:  constant_graph_weights.pb
     >>> t_img = np.ones((1, 3, 3, 3, 1))
     >>> o_iter = list(evaluate_tf_model(m_dir, [t_img], show_nodes = True))
-    Ops: 281
+    Ops: 287
     Tensor("PhiGrid_input:0", shape=(?, ?, ?, ?, 1), dtype=float32, device=/device:CPU:0)
     Tensor("PhiGrid/add_com_phi_grid_3d/phi_coord_3d/concat:0", shape=(?, ?, ?, ?, 5), dtype=float32, device=/device:CPU:0)
     >>> for (a,_,c) in o_iter[0]: print(a, c.shape)
@@ -127,12 +127,16 @@ def export_keras_as_tf(in_model,  # type: keras.models.Model
     if image_labels is not None:
         extra_keys['image_labels'] = image_labels
     with open(os.path.join(export_path, 'graph.json'), 'w') as w:
+        in_shapes = in_model.input_shape
+        if type(in_shapes) is tuple:
+            in_shapes = [in_shapes]
+        out_shapes = in_model.output_shape
+        if type(out_shapes) is tuple:
+            out_shapes = [out_shapes]
         json.dump(dict(input=[j.name for j in in_model.inputs],
                        output=[j.name for j in in_model.outputs],
-                       in_shapes=[in_model.get_input_shape_at(i) for i in
-                                  range(num_inputs)],
-                       out_shapes=[in_model.get_output_shape_at(i) for i in
-                                   range(num_inputs)],
+                       in_shapes=in_shapes,
+                       out_shapes=out_shapes,
                        graph_def=output_graph_name,
                        **extra_keys),
                   w)
