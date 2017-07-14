@@ -1,16 +1,22 @@
 # Tools for ND data processing 
-from bolt.spark.array import BoltArraySpark as raw_array
-from bolt.spark.construct import ConstructSpark as cs
+import warnings
+try:
+    from bolt.spark.array import BoltArraySpark as raw_array
+    from bolt.spark.construct import ConstructSpark as cs
+    from pyqae.backend import Row, RDD
+    sp_array = cs.array
+except ImportError:
+    warnings.warn("Pyqae's Bolt and Pyspark functionality will not be available if the packages are not installed",RuntimeWarning)
+    raw_array = None
+    cs = None
+    Row, RDD = None, None
 
-from pyqae.backend import Row, RDD
-
-sp_array = cs.array
 import numpy as np
 from numpy import ndarray
 from numpy import stack
 import os
 from skimage.io import imsave
-import warnings
+
 from pyqae.utils import Optional, List, \
     Tuple  # noinspection PyUnresolvedReferences
 from pyqae.utils import pprint, \
@@ -439,7 +445,7 @@ def replace_labels_with_bbox(in_labels, def_box=[20, 20, 20]):
 def force_array_dim(in_img,  # type: np.ndarray
                     out_shape,  # type: List[Optional[int]]
                     pad_mode='reflect',
-                    crop_mode='random',
+                    crop_mode='center',
                     **pad_args):
     # type: (...) -> np.ndarray
     """
@@ -447,11 +453,11 @@ def force_array_dim(in_img,  # type: np.ndarray
     :param in_img:
     :param out_shape:
     :param pad_mode:
-    :param crop_mode:
+    :param crop_mode: center or random (default center since it is safer)
     :param pad_args:
     :return:
     >>> np.random.seed(2018)
-    >>> pprint(force_array_dim(np.eye(3), [7,7]))
+    >>> pprint(force_array_dim(np.eye(3), [7,7], crop_mode = 'random'))
     [[ 1.  0.  0.  0.  1.  0.  0.]
      [ 0.  1.  0.  1.  0.  1.  0.]
      [ 0.  0.  1.  0.  0.  0.  1.]
