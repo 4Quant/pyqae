@@ -20,7 +20,6 @@ def remove_edges(in_img,
     :param radius: the radius inside of which values are kept
     :param sph_mode: use spherical coordinates otherwise cylindrical are used
     :return:
-    >>> import numpy as np
     >>> remove_edges(np.ones((4,4,4)), 1.0, True).astype(np.int8)
     array([[[0, 0, 0, 0],
             [0, 0, 0, 0],
@@ -161,6 +160,8 @@ def convex_hull_3d(in_img):
     """
     return np.stack([convex_hull_slice(np.array(c_slice > 0)) for c_slice in
                      in_img])
+
+
 
 from skimage.segmentation import clear_border
 

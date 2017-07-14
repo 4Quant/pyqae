@@ -91,6 +91,77 @@ def cdice_coef_loss_2d(weights, fp_weight=1.0, smooth=0.1):
 
     return _temp_func
 
+def simple_dice(y_true, y_pred):
+    """
+    A simple DICE implementation without any weighting
+    :param y_true:
+    :param y_pred:
+    :return:
+    >>> import tensorflow as tf
+    >>> keval = _setup_keras_backend(2)
+    >>> gt_vec = np.expand_dims(np.stack([np.eye(3), np.zeros((3,3))],-1), 0)
+    >>> pred_vec = tf.constant(np.ones_like(gt_vec))
+    >>> keval(simple_dice(gt_vec, pred_vec))
+    0.28571428435374147
+    """
+    y_t = K.batch_flatten(y_true)
+    y_p = K.batch_flatten(y_pred)
+    return 2.0*K.sum(y_t*y_p) / (K.sum(y_t)+K.sum(y_p)+K.epsilon())
+
+def simple_dice_loss(y_true, y_pred):
+    """
+    A simple inverted dice to use as a loss function
+    :param y_true:
+    :param y_pred:
+    :return:
+    """
+    return 1-simple_dice(y_true, y_pred)
+
+def true_positives(y_true, y_pred):
+    y_t = K.batch_flatten(y_true)
+    y_p = K.batch_flatten(y_pred)
+    return K.sum(y_t*y_p)
+
+def true_negatives(y_true, y_pred):
+    y_t = K.batch_flatten(1-y_true)
+    y_p = K.batch_flatten(1-y_pred)
+    return K.sum(y_t*y_p)
+
+def ppv(y_true, y_pred):
+    """
+    Positive predictive value
+    :param y_true:
+    :param y_pred:
+    :return:
+    >>> import tensorflow as tf
+    >>> keval = _setup_keras_backend(2)
+    >>> gt_vec = tf.constant(np.eye(5))
+    >>> pred_vec = tf.constant(np.ones((5,5)))
+    >>> keval(ppv(gt_vec, pred_vec))
+    0.24999999874999998
+    >>> pred_vec = tf.constant(np.zeros((5,5)))
+    >>> keval(ppv(gt_vec, pred_vec))
+    0.0
+    """
+    return true_positives(y_true, y_pred) / (K.sum(y_true) + K.epsilon())
+
+def npv(y_true, y_pred):
+    """
+    Negative predictive value
+    :param y_true:
+    :param y_pred:
+    :return:
+    >>> import tensorflow as tf
+    >>> keval = _setup_keras_backend(2)
+    >>> gt_vec = tf.constant(np.eye(5))
+    >>> pred_vec = tf.constant(np.ones((5,5)))
+    >>> keval(ppv(gt_vec, pred_vec))
+    0.24999999874999998
+    >>> pred_vec = tf.constant(np.zeros((5,5)))
+    >>> keval(ppv(gt_vec, pred_vec))
+    0.0
+    """
+    return true_negatives(y_true, y_pred) / (K.sum(1-y_true)+K.epsilon())
 
 def _setup_keras_backend(dec=None):
     """
@@ -108,9 +179,10 @@ def _setup_keras_backend(dec=None):
 def wmae_loss(pos_penalty=1.0, neg_penalty=1.0):
     """
     Allows for the positive (overshoot of predictions) penalty to be rescaled
+    >>> import tensorflow as tf
     >>> keval = _setup_keras_backend(2)
-    >>> gt_vec = np.zeros((5,))
-    >>> pred_vec = np.linspace(-1, 1, 5)
+    >>> gt_vec = tf.constant(np.zeros((5,)))
+    >>> pred_vec = tf.constant(np.linspace(-1, 1, 5))
     >>> keval(wmae_loss()(gt_vec, pred_vec))
     [ 1.    0.5   0.    0.33  0.5 ]
     >>> keval(wmae_loss(pos_penalty = 0.1)(gt_vec, pred_vec))
