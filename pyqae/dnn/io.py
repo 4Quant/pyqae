@@ -226,14 +226,23 @@ def evaluate_tf_model(in_model_dir,  # type: str
                            in zip(out_labels, c_output)]
 
 
-
-def predict_single_with_model(model_path, in_image, batch_size = 4):
-    # take the first component of all the model for all batches
-    outputs = [all_outputs[0] for all_outputs in evaluate_tf_model(model_path, [in_image],
-                                                                   batch_size = batch_size)]
-    f_result = np.vstack([f_result for (c_name, c_labels, f_result) in outputs])
+def predict_single_with_model(model_path, in_image, batch_size=4):
+    # type: (str, np.ndarray, int) -> np.ndarray
+    """
+    take the first component of all the model for all batches
+    :param model_path:
+    :param in_image:
+    :param batch_size:
+    :return:
+    """
+    outputs = [all_outputs[0] for all_outputs in
+               evaluate_tf_model(model_path, [in_image],
+                                 batch_size=batch_size)]
+    f_result = np.vstack(
+        [f_result for (c_name, c_labels, f_result) in outputs])
     print('Calculated output sized {}'.format(f_result.shape))
     return f_result
+
 
 class ImageModel(object):
     """
