@@ -63,6 +63,39 @@ class TypeTool(object):
             else:
                 return ctype_name
 
+from warnings import warn
+
+def try_default(errors=(Exception, ), default_value='', verbose = False, warning = False):
+    """
+    A decorator for making failing functions easier to use
+    :param errors:
+    :param default_value:
+    :param verbose:
+    :return:
+    >>> _always_fail('hey', bob = 'not_happy')
+    Failed calling _always_fail with :('hey',),{'bob': 'not_happy'}, because of ValueError('I always fail',)
+    -1
+    """
+    def decorator(func):
+        def new_func(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except errors as e:
+                if verbose:
+                    out_msg = "Failed calling {} with :{},{}, because of {}".format(func.__name__,
+                                                                             args, kwargs, repr(e))
+                    if warning:
+                        warn(out_msg, RuntimeWarning)
+                    else:
+                        print(out_msg)
+                return default_value
+        return new_func
+
+    return decorator
+
+@try_default(default_value = -1, verbose = True, warning = False)
+def _always_fail(*args, **kwargs):
+    raise ValueError("I always fail")
 
 def local_read_depth(in_folder, depth, ext='.dcm', inc_parent=False):
     """

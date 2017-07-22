@@ -53,6 +53,35 @@ def remove_umlauts(in_txt):
     out_txt = out_txt.replace('Ö', 'Oe')
     return out_txt
 
+def remove_non_ascii(in_series, sub_char = " "):
+    """
+    Remove all non-ascii characters from a string and replace them with spaces
+    :param in_series:
+    :return:
+    >>> remove_non_ascii(u"bäb is funny!")
+    'b b is funny!'
+    >>> remove_non_ascii(u"lil jön éats fønky cåke!", "_")
+    'lil_j_n__ats_f_nky_c_ke!'
+    """
+    return ''.join([i if 32 < ord(i) < 126 else sub_char for i in in_series])
+
+def remove_all_non_ascii_df(in_df):
+    # type: (pandas.DataFrame) -> pandas.DataFrame
+    """
+    Remove all non-ascii characters from all strings in a dataframe
+    Good to use before exporting to json or csv
+    :param in_df:
+    :return:
+    >>> import pandas as pd
+    >>> t_df = pd.DataFrame([dict(a = "bäm", b = 99.7), dict(a="høy", b = 88)])
+    >>> remove_all_non_ascii_df(t_df).to_json()
+    '{"a":{"0":"b m","1":"h y"},"b":{"0":99.7,"1":88.0}}'
+    """
+    return in_df.apply(lambda c_col:
+                       c_col.map(
+                           lambda c_row: remove_non_ascii(c_row) if
+                           type(c_row) is str else c_row),
+                       1)
 
 def create_word_matrix(in_df, txt_col, stop_words = ascii_de_stop_words):
     """
