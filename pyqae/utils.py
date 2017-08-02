@@ -3,6 +3,8 @@ import logging
 import os
 from glob import glob
 from tempfile import NamedTemporaryFile
+import tempfile
+import shutil
 
 import numpy as np
 
@@ -34,6 +36,31 @@ except ImportError:
 def get_temp_filename(suffix):
     with NamedTemporaryFile(suffix=suffix) as w:
         return w.name
+
+def _test_temp_dir():
+    import os
+    with NamedTemporaryDirectory() as f:
+        with open(os.path.join(f, 'simple.txt'), 'w') as wfile:
+            wfile.write('12345')
+        with open(os.path.join(f, 'simple.txt'), 'r') as rfile:
+            out_str = rfile.read()
+            print(out_str)
+            assert int(out_str)==12345 , 'Strings should'
+    assert os.path.exists(os.path.join(f, 'simple.txt')) == False, "Temporary directory should be deleted"
+
+
+class NamedTemporaryDirectory(object):
+    """
+    Context manager for tempfile.mkdtemp() so it's usable with "with" statement.
+    >>> _test_temp_dir()
+    12345
+    """
+    def __enter__(self):
+        self.name = tempfile.mkdtemp()
+        return self.name
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        shutil.rmtree(self.name)
 
 
 class TypeTool(object):
