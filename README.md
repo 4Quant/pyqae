@@ -13,8 +13,15 @@ The core `pyqae` package defines core data structures and read/write operations 
 
 It is built on [`numpy`](https://github.com/numpy/numpy), [`scipy`](https://github.com/scipy/scipy), [`scikit-learn`](https://github.com/scikit-learn/scikit-learn), and [`scikit-image`](https://github.com/scikit-image/scikit-image), and is compatible with Python 2.7+ and 3.4+. You can install it using:
 
+
+The official procedure for installation is first running
+```bash
+pip install -r requirements.txt
 ```
-pip install thunder-python
+
+And then running
+```bash
+python setup.py install
 ```
 
 ## related packages

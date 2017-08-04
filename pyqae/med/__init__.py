@@ -12,9 +12,12 @@ from pyqae import viz
 from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
 try:
     from dicom import read_file as dicom_simple_read
-except:
-    def dicom_simple_read(*args, **kwargs):
-        raise Exception("Dicom Library is not available")
+except ImportError:
+    try:
+        from pydicom import read_file as dicom_simple_read
+    except:
+        def dicom_simple_read(*args, **kwargs):
+            raise Exception("Dicom Library is not available")
 
 type_info = namedtuple('type_info', ['inferrable', 'realtype', 'has_nulltype', 'length', 'is_complex'])
 
