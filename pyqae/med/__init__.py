@@ -4,17 +4,23 @@ Modules related to Medicine and DICOM Files
 from collections import namedtuple
 from typing import Any
 
-import dicom
+
 import numpy as np
 import pandas as pd
 
 from pyqae import viz
 from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
+dicom_backend = None # not an essential dependency
+
 try:
+    import dicom
     from dicom import read_file as dicom_simple_read
+    dicom_backend = 'dicom'
 except ImportError:
     try:
+        import pydicom as dicom
         from pydicom import read_file as dicom_simple_read
+        dicom_backend = 'pydicom'
     except:
         def dicom_simple_read(*args, **kwargs):
             raise Exception("Dicom Library is not available")
@@ -119,12 +125,31 @@ def _remove_empty_columns(in_df):
     # remove missing columns
     return in_df[[ccol for ccol in in_df.columns if empty_cols.get(ccol, 0) == 0]]
 
+if dicom_backend == 'dicom':
+    from dicom.multival import MultiValue
+    from dicom.sequence import Sequence
+    from dicom.valuerep import PersonName3
+    from dicom.uid import UID
 
-# perform conversions
-_dicom_conv_dict = {dicom.multival.MultiValue: lambda x: np.array(x).tolist(),
-                    dicom.sequence.Sequence: lambda seq: [[(str(d_ele.tag), str(d_ele.value)) for d_ele in d_set] for
-                                                          d_set in seq],
-                    dicom.valuerep.PersonName3: lambda x: str(x)}
+elif dicom_backend == 'pydicom':
+    from pydicom.multival import MultiValue
+    from pydicom.sequence import Sequence
+    from pydicom.valuerep import PersonName3
+
+    from pydicom.uid import UID
+
+if dicom_backend is not None:
+    # perform conversions
+    _dicom_conv_dict = {MultiValue: lambda x: np.array(x).tolist(),
+                        Sequence: lambda seq: [
+                            [(str(d_ele.tag), str(d_ele.value)) for d_ele in
+                             d_set] for
+                            d_set in seq],
+                        PersonName3: lambda x: str(x),
+                        UID: lambda x: str(x)}
+
+
+
 
 
 def _apply_conv_dict(in_ele):
