@@ -3,12 +3,13 @@ Package for visualization tools and support
 """
 import base64
 from io import BytesIO
+from itertools import chain
+from warnings import warn
 
 import numpy as np
 from PIL import Image as PImage
 from matplotlib import animation, rc
 from matplotlib.pyplot import cm
-from itertools import chain
 
 from pyqae.utils import get_temp_filename, Tuple, Optional
 
@@ -37,7 +38,8 @@ def _np_to_uri(in_array,  # type: np.ndarray
     out_img_data = BytesIO()
     rs_p_data.save(out_img_data, format='png')
     out_img_data.seek(0)  # rewind
-    return base64.b64encode(out_img_data.read()).decode("ascii").replace("\n", "")
+    return base64.b64encode(out_img_data.read()).decode("ascii").replace("\n",
+                                                                         "")
 
 
 _wrap_uri = lambda data_uri: "data:image/png;base64,{0}".format(data_uri)
@@ -54,11 +56,16 @@ def display_uri(uri_list, wrap_ipython=True):
     html_func = HTML if wrap_ipython else fake_HTML
     out_html = ""
     for in_uri in uri_list:
-        out_html += """<img src="{0}" width = "100px" height = "100px" />""".format(_wrap_uri(in_uri))
+        out_html += """<img src="{0}" width = "100px" height = "100px" />""".format(
+            _wrap_uri(in_uri))
     return html_func(out_html)
 
 
-from skimage.measure import marching_cubes
+try:
+    from skimage.measure import marching_cubes_classic
+except ImportError:
+    warn("pyqae works best with the latest version of skimage")
+    from skimage.measure import marching_cubes as marching_cubes_classic
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from mpl_toolkits.mplot3d.axes3d import Axes3D
 import matplotlib.pyplot as plt
@@ -69,12 +76,12 @@ MAX_COMP_LIMIT = 50
 def draw_3d_labels(in_bone_labels,  # type: np.ndarray
                    start_idx=1,  # type: int
                    rescale_func=None,
-                   vox_size = None,
-                   verbose = False,
-                   level = 0,
-                   figsize = (10, 12),
-                   force_shape = True,
-                   flip = True):
+                   vox_size=None,
+                   verbose=False,
+                   level=0,
+                   figsize=(10, 12),
+                   force_shape=True,
+                   flip=True):
     # type: (...) -> Tuple[Axes3D, matplotlib.figure.Figure]
     # somehow add type to rescale_fun Optional[Function(np.ndarray, np.ndarray)]
 
@@ -95,7 +102,7 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
     """
     # todo I don't think the Function typing is correct
 
-    #plt.rcParams['savefig.bbox'] = 'tight'
+    # plt.rcParams['savefig.bbox'] = 'tight'
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection='3d')
     # Fancy indexing: `verts[faces]` to generate a collection of triangles
@@ -108,7 +115,7 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
     else:
         ax_flip = lambda x: rescale_func(x)
 
-    for i in range(start_idx, min(max_comp, MAX_COMP_LIMIT)+1):
+    for i in range(start_idx, min(max_comp, MAX_COMP_LIMIT) + 1):
 
         if i == 0:
             v_img = ax_flip((in_bone_labels > 0).astype(np.float32))
@@ -122,7 +129,7 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
         if vox_size is not None:
             mc_args['spacing'] = vox_size
 
-        verts, faces = marching_cubes(v_img, **mc_args)
+        verts, faces = marching_cubes_classic(v_img, **mc_args)
 
         mesh = Poly3DCollection(verts[faces])
 
@@ -142,7 +149,7 @@ def draw_3d_labels(in_bone_labels,  # type: np.ndarray
         ax.set_ylim(0, n_shape[1])
         ax.set_zlim(0, n_shape[2])
     else:
-        pass # ax.set_aspect('equal')
+        pass  # ax.set_aspect('equal')
     ax.view_init(45, 45)
     ax.axis('off')
     return ax, fig
@@ -194,14 +201,17 @@ def make_stack_animation(in_stack,  # type: np.ndarray
                          fig_dpi=300,
                          **plt_kwargs
                          ):
-    assert len(in_stack.shape) == 3, "Only 3D arrays are supported for the stack animation code"
+    assert len(
+        in_stack.shape) == 3, "Only 3D arrays are supported for the stack animation code"
     _checkffmpeg()
     in_fig, in_ax = plt.subplots(1, 1, figsize=fig_size, dpi=fig_dpi)
     _img_ax = in_ax.imshow(in_stack[0], **plt_kwargs)
     in_ax.axis('off')
-    frame_arr = np.linspace(0, in_stack.shape[0] - 1, frames / 2 if bounce else frames)  # type: np.ndarray
+    frame_arr = np.linspace(0, in_stack.shape[0] - 1,
+                            frames / 2 if bounce else frames)  # type: np.ndarray
     if bounce:
-        frame_arr = np.array(list(frame_arr.tolist()) + list(reversed(frame_arr)))
+        frame_arr = np.array(
+            list(frame_arr.tolist()) + list(reversed(frame_arr)))
 
     def _updatefig(ind):
         _img_ax.set_array(in_stack[int(frame_arr[ind])])
@@ -234,7 +244,8 @@ def draw_3d_label_animation(in_bone_labels,
     ax, fig = draw_3d_labels(in_bone_labels=in_bone_labels,
                              rescale_func=rescale_func,
                              start_idx=start_idx)
-    out_la = make_3d_animation(in_fig=fig, in_ax=ax, frames=frames, fps=fps, file_path=file_path, as_html=as_html)
+    out_la = make_3d_animation(in_fig=fig, in_ax=ax, frames=frames, fps=fps,
+                               file_path=file_path, as_html=as_html)
     if as_html:  # only close the figures if we are only keeping the html
         fig.clf()
         plt.close('all')
@@ -258,7 +269,8 @@ def _create_tf_graph():
         out_val = add_com_grid_3d_tf(in_val, False)
     return g
 
-def tf_graph_to_dot(in_graph, add_nodes = True, add_edges = True):
+
+def tf_graph_to_dot(in_graph, add_nodes=True, add_edges=True):
     # type: (tf.Graph, bool, bool) -> pydot.Dot
     """
     Great a graph from a tensorflow graph to dot
@@ -281,11 +293,12 @@ def tf_graph_to_dot(in_graph, add_nodes = True, add_edges = True):
     dot.set('concentrate', True)
     dot.set_node_defaults(shape='record')
     all_ops = in_graph.get_operations()
-    all_tens_dict = {k: i for i,k in enumerate(set(chain(*[c_op.outputs for c_op in all_ops])))}
+    all_tens_dict = {k: i for i, k in enumerate(
+        set(chain(*[c_op.outputs for c_op in all_ops])))}
     print('Number of nodes:', len(all_tens_dict.keys()))
     if add_nodes:
         for c_node in all_tens_dict.keys():
-            node = pydot.Node(c_node.name)#, label=label)
+            node = pydot.Node(c_node.name)  # , label=label)
             dot.add_node(node)
     if add_edges:
         edge_count = 0
@@ -293,9 +306,10 @@ def tf_graph_to_dot(in_graph, add_nodes = True, add_edges = True):
             for c_output in c_op.outputs:
                 for c_input in c_op.inputs:
                     dot.add_edge(pydot.Edge(c_input.name, c_output.name))
-                    edge_count+=1
+                    edge_count += 1
         print('Number of edges:', edge_count)
     return dot
+
 
 if __name__ == '__main__':
     import doctest

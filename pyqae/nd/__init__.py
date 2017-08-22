@@ -308,19 +308,33 @@ def apply_bbox(in_vol,  # type: np.ndarray
            [0, 1]], dtype=uint8)
     >>> apply_bbox(np.eye(4).astype(np.uint8), [(0,2), (-2,2)], True).shape
     (2, 4)
+    >>> t_box = [(0, 2), (-2, 1), (-2, 1)]
+    >>> apply_bbox(np.arange(64).reshape((4,4,4)), t_box, True)
+    array([[[ 0,  0,  0],
+            [ 0,  0,  0],
+            [ 0,  0,  0]],
+    <BLANKLINE>
+           [[16, 16, 16],
+            [16, 16, 16],
+            [16, 16, 16]]])
+    >>> apply_bbox(np.zeros((4,4,4,1)), t_box, True).shape # new dim?
+    (2, 3, 3, 1)
     """
 
     if pad_values:
         # TODO test padding
         warnings.warn("Padded apply_bbox not fully tested yet", RuntimeWarning)
         n_pads = []  # type: List[Tuple[int,int]]
-        n_bbox = []  # type: List[Tuple[int, int]]
+        n_bbox = []  # type: List[Tuple[int,int]]
         for dim_idx, ((a, b), dim_size) in enumerate(zip(bbox_list,
                                                          in_vol.shape)):
             a_pad = 0 if a >= 0 else -a
             b_pad = 0 if b < dim_size else b - dim_size + 1
             n_pads += [(a_pad, b_pad)]
             n_bbox += [(a + a_pad, b + a_pad)]  # adjust the box
+
+        while len(n_pads)<len(in_vol.shape):
+            n_pads += [(0,0)]
         # update the volume
         in_vol = np.pad(in_vol, n_pads, mode=padding_mode)
         # update the bounding box list

@@ -4,28 +4,32 @@ Modules related to Medicine and DICOM Files
 from collections import namedtuple
 from typing import Any
 
-
 import numpy as np
 import pandas as pd
 
 from pyqae import viz
 from pyqae.backend import sq_types, _infer_type, _has_nulltype, F
-dicom_backend = None # not an essential dependency
+
+dicom_backend = None  # not an essential dependency
 
 try:
     import dicom
     from dicom import read_file as dicom_simple_read
+
     dicom_backend = 'dicom'
 except ImportError:
     try:
         import pydicom as dicom
         from pydicom import read_file as dicom_simple_read
+
         dicom_backend = 'pydicom'
     except:
         def dicom_simple_read(*args, **kwargs):
             raise Exception("Dicom Library is not available")
 
-type_info = namedtuple('type_info', ['inferrable', 'realtype', 'has_nulltype', 'length', 'is_complex'])
+type_info = namedtuple('type_info',
+                       ['inferrable', 'realtype', 'has_nulltype', 'length',
+                        'is_complex'])
 
 
 def _tlen(x):
@@ -62,7 +66,8 @@ def safe_type_infer(x):
     try:
         sq_type = _infer_type(x)
         return type_info(True, sq_type, has_nulltype=_has_nulltype(sq_type),
-                         length=_tlen(x), is_complex=(type(sq_type) in COMPLEX_TYPES)
+                         length=_tlen(x),
+                         is_complex=(type(sq_type) in COMPLEX_TYPES)
                          )
     except:
         return type_info(False, type(x), has_nulltype=False,
@@ -91,15 +96,20 @@ def dicom_to_dict(in_dicom):
 
     cur_kv_pairs = list(df_dicom.T.to_dict().values())[0]  # first row
     valid_keys = _identify_column_types(cur_kv_pairs)
-    do_keep = lambda key, ti: ti.inferrable & (not ti.has_nulltype) & (not ti.is_complex)  # & (ti.length>0)
-    fvalid_keys = dict([(k, do_keep(k, t_info)) for k, t_info in valid_keys.items()])
-    return (dict([(k, v) for (k, v) in cur_kv_pairs.items() if fvalid_keys.get(k)]),
-            dict([(k, v) for (k, v) in cur_kv_pairs.items() if not fvalid_keys.get(k)]),
-            valid_keys)
+    do_keep = lambda key, ti: ti.inferrable & (not ti.has_nulltype) & (
+    not ti.is_complex)  # & (ti.length>0)
+    fvalid_keys = dict(
+        [(k, do_keep(k, t_info)) for k, t_info in valid_keys.items()])
+    return (
+    dict([(k, v) for (k, v) in cur_kv_pairs.items() if fvalid_keys.get(k)]),
+    dict(
+        [(k, v) for (k, v) in cur_kv_pairs.items() if not fvalid_keys.get(k)]),
+    valid_keys)
 
 
 def dicoms_to_dict(dicom_list):
-    fvr = lambda x: None if x.first_valid_index() is None else x[x.first_valid_index()]
+    fvr = lambda x: None if x.first_valid_index() is None else x[
+        x.first_valid_index()]
 
     out_list = []
 
@@ -112,18 +122,26 @@ def dicoms_to_dict(dicom_list):
     df_dicom = pd.DataFrame(out_list)  # just for the type conversion
     fvi_series = df_dicom.apply(_findvalidvalues, axis=0).to_dict()
     valid_keys = _identify_column_types(fvi_series)
-    do_keep = lambda key, ti: ti.inferrable & (not ti.has_nulltype)  # & (not ti.is_complex) & (ti.length>0)
-    fvalid_keys = dict([(k, do_keep(k, t_info)) for k, t_info in valid_keys.items()])
-    good_columns = list(map(lambda x: x[0], filter(lambda x: x[1], fvalid_keys.items())))
-    bad_columns = list(map(lambda x: x[0], filter(lambda x: not x[1], fvalid_keys.items())))
+    do_keep = lambda key, ti: ti.inferrable & (
+    not ti.has_nulltype)  # & (not ti.is_complex) & (ti.length>0)
+    fvalid_keys = dict(
+        [(k, do_keep(k, t_info)) for k, t_info in valid_keys.items()])
+    good_columns = list(
+        map(lambda x: x[0], filter(lambda x: x[1], fvalid_keys.items())))
+    bad_columns = list(
+        map(lambda x: x[0], filter(lambda x: not x[1], fvalid_keys.items())))
     sql_df = df_dicom[good_columns]
     return sql_df.dropna(axis=1)
 
 
 def _remove_empty_columns(in_df):
-    empty_cols = dict(filter(lambda kv: kv[1] > 0, in_df.apply(_countmissingvalues, axis=0).to_dict().items()))
+    empty_cols = dict(filter(lambda kv: kv[1] > 0,
+                             in_df.apply(_countmissingvalues,
+                                         axis=0).to_dict().items()))
     # remove missing columns
-    return in_df[[ccol for ccol in in_df.columns if empty_cols.get(ccol, 0) == 0]]
+    return in_df[
+        [ccol for ccol in in_df.columns if empty_cols.get(ccol, 0) == 0]]
+
 
 if dicom_backend == 'dicom':
     from dicom.multival import MultiValue
@@ -147,9 +165,8 @@ if dicom_backend is not None:
                             d_set in seq],
                         PersonName3: lambda x: str(x),
                         UID: lambda x: str(x)}
-
-
-
+else:
+    _dicom_conv_dict = {}
 
 
 def _apply_conv_dict(in_ele):
@@ -165,7 +182,9 @@ def _conv_df(in_df):
 
 
 def dicom_paths_to_df(in_path_list):
-    f_df = dicoms_to_dict([dicom_simple_read(in_path, stop_before_pixels=True) for in_path in in_path_list])
+    f_df = dicoms_to_dict(
+        [dicom_simple_read(in_path, stop_before_pixels=True) for in_path in
+         in_path_list])
     f_df['DICOMPath4Q'] = in_path_list
     rec_df = _remove_empty_columns(f_df)
     conv_df = _conv_df(rec_df)
@@ -210,6 +229,8 @@ def _ndarray_to_sql(in_arr):
 twod_arr_type = sq_types.ArrayType(sq_types.ArrayType(sq_types.IntegerType()))
 # the pull_input_tile function is wrapped into a udf to it can be applied to create the new image column
 # numpy data is not directly supported and typed arrays must be used instead therefor we run the .tolist command
-read_dicom_slice_udf = F.udf(lambda x: dicom_simple_read(x).pixel_array.tolist(), returnType=twod_arr_type)
+read_dicom_slice_udf = F.udf(
+    lambda x: dicom_simple_read(x).pixel_array.tolist(),
+    returnType=twod_arr_type)
 
 image_to_uri_udf = F.udf(viz._np_to_uri, returnType=sq_types.StringType())

@@ -2,13 +2,13 @@ from warnings import warn
 
 import numpy as np
 import tensorflow as tf
-from skimage.measure import regionprops
 from scipy.ndimage import label
-from pyqae.nd import meshgridnd_like, get_bbox, apply_bbox
-from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
-from pyqae.nd.features import sorted_label
-from pyqae.dnn.superpixels import batch_slic_time
+from skimage.measure import regionprops
 
+from pyqae.dnn.superpixels import batch_slic_time
+from pyqae.nd import meshgridnd_like, get_bbox, apply_bbox
+from pyqae.nd.features import sorted_label
+from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 
 __doc__ = """
 A set of Tensorflow-based layers and operations for including in models
@@ -160,7 +160,7 @@ def add_simple_grid_tf(in_layer,  # type: tf.Tensor
 def add_com_grid_3d_tf(in_layer,
                        layer_concat=False,
                        as_r_vec=False,
-                       r_scale = 1.0
+                       r_scale=1.0
                        ):
     # type: (tf.Tensor, bool, bool) -> tf.Tensor
     """
@@ -232,7 +232,7 @@ def add_com_grid_3d_tf(in_layer,
         with tf.variable_scope('make_grid'):
             out_var = [(tf.reshape(c_var,
                                    (batch_size, xg_wid, yg_wid, zg_wid, 1))
-                        - c_sm) / (r_scale*c_sd)
+                        - c_sm) / (r_scale * c_sd)
                        for c_var, c_sm, c_sd in zip(svar_list, sm_matlist,
                                                     sd_matlist)]
 
@@ -417,7 +417,7 @@ def spatial_gradient_2d_tf(in_img):
         return (0.5 * dx_img, 0.5 * dy_img)
 
 
-def phi_coord_3d_tf(r_img, # type: tf.Tensor
+def phi_coord_3d_tf(r_img,  # type: tf.Tensor
                     z_rad=0.0,
                     include_r=False,
                     include_ir=False,
@@ -478,7 +478,7 @@ def phi_coord_3d_tf(r_img, # type: tf.Tensor
         return tf.concat(out_vec, -1)
 
 
-def phi_coord_2d_tf(r_img, # type: tf.Tensor
+def phi_coord_2d_tf(r_img,  # type: tf.Tensor
                     z_rad=0.0,
                     include_r=False,
                     include_ir=False,
@@ -541,7 +541,7 @@ def add_com_phi_grid_3d_tf(in_layer,
                            z_rad=0.0,
                            include_r=False,
                            include_ir=False,
-                           r_scale = 1.0
+                           r_scale=1.0
                            ):
     # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
     """
@@ -580,7 +580,7 @@ def add_com_phi_grid_3d_tf(in_layer,
             return phi_out
 
 
-def add_com_phi_grid_2d_tf(in_layer, # type: tf.Tensor
+def add_com_phi_grid_2d_tf(in_layer,  # type: tf.Tensor
                            layer_concat=False,
                            z_rad=0.0,
                            include_r=False,
@@ -623,47 +623,136 @@ def add_com_phi_grid_2d_tf(in_layer, # type: tf.Tensor
             return phi_out
 
 
-def obj_to_phi_np(seg_img, z_rad=0):
-    # type: (np.ndarray, float) -> np.ndarray
+def obj_to_phi_np(seg_img,
+                  min_z_rad=0,
+                  add_r=False,
+                  std_xyz=[1, 1, 1]
+                  ):
+    # type: (np.ndarray, float, bool, Tuple[float, float, float]) -> np.ndarray
     """
     Create a phi mask from a given object
     :param seg_img:
-    :param z_rad:
+    :param min_z_rad: the minimum z radius to include
+    :param add_r: add a r coordinate
     :return:
+    >>> t_img = np.stack([np.eye(3)]*2,0)
+    >>> pprint(obj_to_phi_np(t_img))
+    [[[[ 0.   -0.25 -0.25]
+       [ 0.   -0.5   0.  ]
+       [ 0.   -0.25  0.25]]
+    <BLANKLINE>
+      [[ 0.    0.   -0.5 ]
+       [  nan   nan   nan]
+       [ 0.    0.    0.5 ]]
+    <BLANKLINE>
+      [[ 0.    0.25 -0.25]
+       [ 0.    0.5   0.  ]
+       [ 0.    0.25  0.25]]]
+    <BLANKLINE>
+    <BLANKLINE>
+     [[[ 0.   -0.25 -0.25]
+       [ 0.   -0.5   0.  ]
+       [ 0.   -0.25  0.25]]
+    <BLANKLINE>
+      [[ 0.    0.   -0.5 ]
+       [  nan   nan   nan]
+       [ 0.    0.    0.5 ]]
+    <BLANKLINE>
+      [[ 0.    0.25 -0.25]
+       [ 0.    0.5   0.  ]
+       [ 0.    0.25  0.25]]]]
+    >>> obj_to_phi_np(t_img, add_r=True).shape
+    (2, 3, 3, 4)
     """
     c_reg = regionprops((seg_img > 0).astype(int))[0]
     return generate_phi_coord_np(seg_img,
                                  centroid=c_reg.centroid,
-                                 std_xyz=[1, 1, 1],
-                                 zrad=z_rad)
+                                 std_xyz=std_xyz,
+                                 min_z_rad=min_z_rad,
+                                 add_r=add_r)
+
+def obj_to_std_phi_np(seg_img,
+                  min_z_rad=0
+                  ):
+    # type: (np.ndarray, float) -> np.ndarray
+    """
+    Create a phi mask from a given object
+    :param seg_img:
+    :param min_z_rad: the minimum z radius to include
+    :param add_r: add a r coordinate
+    :return:
+    >>> t_img = np.stack([np.eye(3)]*2,0)
+    >>> pprint(obj_to_std_phi_np(t_img))
+    [[[[ 0.   -0.25 -0.25]
+       [ 0.   -0.5   0.  ]
+       [ 0.   -0.25  0.25]]
+    <BLANKLINE>
+      [[ 0.    0.   -0.5 ]
+       [  nan   nan   nan]
+       [ 0.    0.    0.5 ]]
+    <BLANKLINE>
+      [[ 0.    0.25 -0.25]
+       [ 0.    0.5   0.  ]
+       [ 0.    0.25  0.25]]]
+    <BLANKLINE>
+    <BLANKLINE>
+     [[[ 0.   -0.25 -0.25]
+       [ 0.   -0.5   0.  ]
+       [ 0.   -0.25  0.25]]
+    <BLANKLINE>
+      [[ 0.    0.   -0.5 ]
+       [  nan   nan   nan]
+       [ 0.    0.    0.5 ]]
+    <BLANKLINE>
+      [[ 0.    0.25 -0.25]
+       [ 0.    0.5   0.  ]
+       [ 0.    0.25  0.25]]]]
+    """
+    c_reg = regionprops((seg_img > 0).astype(int))[0]
+    xx, yy, zz = meshgridnd_like(seg_img)
+
+    std_xyz = np.std([c_x[seg_img > 0] for c_x in [xx, yy, zz]],1)
+    return generate_phi_coord_np(seg_img,
+                                 centroid=c_reg.centroid,
+                                 std_xyz=std_xyz,
+                                 min_z_rad=min_z_rad,
+                                 add_r=True)
 
 
-def generate_phi_coord_np(seg_img, # type: np.ndarray
-                          centroid, # type: Tuple[float, float, float]
-                          std_xyz=[1, 1, 1], # type: Tuple[float, float, float]
-                          z_rad=0 # type: float
+def generate_phi_coord_np(seg_img,  # type: np.ndarray
+                          centroid,  # type: Tuple[float, float, float]
+                          std_xyz=[1, 1, 1],
+                          # type: Tuple[float, float, float]
+                          min_z_rad=0,  # type: float
+                          add_r=False,
                           ):
     # type: (...) -> np.ndarray
     """
     Create the phi coordinate system
     :param seg_img:
     :param centroid:
-    :param z_rad:
+    :param min_z_rad:
+    :param add_r: add the r coordinate
     :return:
     """
     xx, yy, zz = meshgridnd_like(seg_img)
     r_img = np.sqrt(np.power((xx - centroid[0]) / std_xyz[0], 2) +
                     np.power((yy - centroid[1]) / std_xyz[1], 2) +
                     np.power((zz - centroid[2]) / std_xyz[2], 2))
-    return phi_coord_np(r_img, z_rad=z_rad)
+    phi_img = phi_coord_np(r_img, min_z_rad=min_z_rad)
+    if add_r:
+        return np.concatenate([np.expand_dims(r_img, -1),
+                               phi_img], -1)
+    else:
+        return phi_img
 
 
-def phi_coord_np(r_img, z_rad):
+def phi_coord_np(r_img, min_z_rad):
     # type: (np.ndarray, float) -> np.ndarray
     """
     Calculate the phi coordinates using numpy
     :param r_img:
-    :param z_rad:
+    :param min_z_rad: the minimum radius from the center to include
     :return:
     >>> _simple_dist_img.shape
     (3, 3, 2)
@@ -680,9 +769,9 @@ def phi_coord_np(r_img, z_rad):
     dx_img, dy_img, dz_img = np.gradient(r_img)
     dr_img = np.sqrt(
         np.power(dx_img, 2) + np.power(dy_img, 2) + np.power(dz_img, 2))
-    dphi_a_img = np.arcsin(dx_img / dr_img) / np.pi * (r_img > z_rad)
-    dphi_b_img = (np.arcsin(dy_img / dr_img)) / np.pi * (r_img > z_rad)
-    dphi_c_img = (np.arcsin(dz_img / dr_img)) / np.pi * (r_img > z_rad)
+    dphi_a_img = np.arcsin(dx_img / dr_img) / np.pi * (r_img > min_z_rad)
+    dphi_b_img = (np.arcsin(dy_img / dr_img)) / np.pi * (r_img > min_z_rad)
+    dphi_c_img = (np.arcsin(dz_img / dr_img)) / np.pi * (r_img > min_z_rad)
     return np.stack([dphi_a_img, dphi_b_img, dphi_c_img], -1)
 
 
@@ -958,6 +1047,7 @@ def label_tf(inp, channel=0, **label_args):
             [ 0.,  2.,  0.],
             [ 3.,  0.,  0.]]])
     """
+
     def batch_label(x):
         return np.expand_dims(
             np.stack([sorted_label(cx[..., channel], **label_args)
@@ -970,9 +1060,9 @@ def label_tf(inp, channel=0, **label_args):
         return y
 
 
-def batch_label_time(in_batch, # type: np.ndarray
-                     channel, # type: int
-                     time_steps, # type: int
+def batch_label_time(in_batch,  # type: np.ndarray
+                     channel,  # type: int
+                     time_steps,  # type: int
                      channel_thresh=0.5,
                      **label_args):
     # type: (...) -> np.ndarray
@@ -1032,7 +1122,7 @@ def batch_label_time(in_batch, # type: np.ndarray
         c_label = label(c_img[..., channel] > channel_thresh, **label_args)[0]
         for j in range(time_steps):
             out_batch[i, j, :, :, 0] = (
-            c_label == (j + 1))  # don't include j=0
+                c_label == (j + 1))  # don't include j=0
     return out_batch
 
 
@@ -1085,8 +1175,8 @@ def label_2d_to_time_tf(inp, channel=0, time_steps=5, **label_args):
 
 def slic_2d_to_time_tf(inp,
                        time_steps=5,
-                       include_mask = False,
-                    include_channels = True,
+                       include_mask=False,
+                       include_channels=True,
                        **batch_slic_args):
     """
     Takes an input image, calculates the connected component labels and then
@@ -1173,10 +1263,10 @@ def slic_2d_to_time_tf(inp,
     """
     with tf.name_scope('slic_2d_to_time'):
         y = tf.py_func(lambda x: batch_slic_time(x,
-                                                  time_steps=time_steps,
-                                                 include_channels = include_channels,
-                                                 include_mask = include_mask,
-                                                  **batch_slic_args),
+                                                 time_steps=time_steps,
+                                                 include_channels=include_channels,
+                                                 include_mask=include_mask,
+                                                 **batch_slic_args),
                        [inp],
                        tf.float32,
                        name='skimage_batch_slic')
@@ -1187,6 +1277,7 @@ def slic_2d_to_time_tf(inp,
         y.set_shape([new_shape[0], time_steps, new_shape[1],
                      new_shape[2], out_channels])
         return y
+
 
 def label_average_features_tf(img_data, label_segs):
     # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
@@ -1221,6 +1312,7 @@ def label_average_features_tf(img_data, label_segs):
                                        tf.float32.max)
             return tf.reduce_sum(f_img_data * f_slic_segs, [2, 3]) / out_pix
 
+
 def features_to_label_tf(feature_data, label_data):
     # type: (tf.Tensor, tf.Tensor) -> tf.Tensor
     """
@@ -1251,11 +1343,13 @@ def features_to_label_tf(feature_data, label_data):
              [ 18.,  19.,  20.,  21.,  22.,  23.]]]])
     """
     with tf.name_scope('expand_features'):
-        wide_features = tf.expand_dims(tf.expand_dims(feature_data,2),2)
-        f_features = tf.tile(wide_features, [1, 1, tf.shape(label_data)[2], tf.shape(label_data)[3], 1])
+        wide_features = tf.expand_dims(tf.expand_dims(feature_data, 2), 2)
+        f_features = tf.tile(wide_features, [1, 1, tf.shape(label_data)[2],
+                                             tf.shape(label_data)[3], 1])
         f_labels = tf.tile(label_data, [1, 1, 1, 1, tf.shape(feature_data)[2]])
         with tf.name_scope('combine_weights'):
-             return tf.reduce_max(f_features*f_labels,[1])
+            return tf.reduce_max(f_features * f_labels, [1])
+
 
 def batch_label_time_zoom(in_batch,
                           channel,
@@ -1323,7 +1417,8 @@ def batch_label_time_zoom(in_batch,
     out_batch = np.zeros((batch_size, time_steps, x_size, y_size, channels),
                          dtype=np.float32)
     for i, c_img in enumerate(in_batch):
-        c_label = sorted_label(c_img[..., channel] > channel_thresh, **label_args)
+        c_label = sorted_label(c_img[..., channel] > channel_thresh,
+                               **label_args)
         for j in range(time_steps):
             # don't include j=0
             c_bbox = get_bbox(c_label == (j + 1))
