@@ -221,10 +221,12 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
                     verbose=False):
     """
     Create batches from a generator output (useful for network training)
-    :param in_gen:
-    :param batch_size:
-    :param batch_dim:
-    :param add_dim:
+    NOTE: The output of the generator must be a list for a single ND array
+    it will not work correctly
+    :param in_gen: generator (iterable) to process
+    :param batch_size: the size of the batches to make
+    :param batch_dim: the dimension to batch long (default 0)
+    :param add_dim: append the dimension to the matrix
     :return:
     >>> t_gen = zero_gen(2)
     >>> for _,(v1, v2) in zip(range(1), t_gen): print(v1.shape, v2.shape)
@@ -236,19 +238,30 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
     >>> m_gen = batch_generator(t_gen, batch_size = 4, batch_dim = -1,add_dim = True)
     >>> for _,(v1, v2, v3) in zip(range(1), m_gen): print(v1.shape, v2.shape, v3.shape)
     (1, 2, 3, 4) (1, 2, 3, 4) (1, 2, 3, 4)
+    >>> f_gen = [(np.zeros((1,2,3)),)]*7
+    >>> m_gen = batch_generator(f_gen, batch_size = 4, batch_dim = -1,add_dim = True)
+    >>> for _,[v1] in zip(range(3), m_gen): print(v1.shape)
+    (1, 2, 3, 4)
+    (1, 2, 3, 3)
     """
+    def _package_cache(in_cache):
+        temp_cols = [[] for c_ele in in_cache[0]]
+        for c_row in in_cache:
+            for j, c_col in enumerate(c_row):
+                temp_cols[j] += [c_col]
+        if add_dim:
+            c_func = lambda x: np.stack(x, axis=batch_dim)
+        else:
+            c_func = lambda x: np.concatenate(x, axis=batch_dim)
+
+        return [c_func(c_row) for c_row in temp_cols]
     cached_output = []
     for i, c_out in enumerate(in_gen, 1):
         cached_output += [c_out]
         if (i % batch_size) == 0:
-            temp_cols = [[] for c_ele in cached_output[0]]
-            for c_row in cached_output:
-                for j, c_col in enumerate(c_row):
-                    temp_cols[j] += [c_col]
-            if add_dim:
-                c_func = lambda x: np.stack(x, axis=batch_dim)
-            else:
-                c_func = lambda x: np.concatenate(x, axis=batch_dim)
-
-            yield [c_func(c_row) for c_row in temp_cols]
+            yield _package_cache(cached_output)
             cached_output = []
+    # ensure if there are any left over that we package them and return
+    # correctly
+    if len(cached_output)>0:
+        yield _package_cache(cached_output)
