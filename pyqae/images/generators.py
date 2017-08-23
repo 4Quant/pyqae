@@ -75,21 +75,22 @@ def random_region_generator(in_image_dict,  # type: Dict[str,np.ndarray]
     :param roi_dim:
     :param trim_dim:
     :return:
-    >>> in_data = OrderedDict(CT_Image = _test_ct_img, PET = _test_pet_img)
-    >>> out_data = OrderedDict(Labels = _test_lab_img)
+    >>> in_data = dict(CT_Image = _test_ct_img, PET = _test_pet_img)
+    >>> out_data = dict(Labels = _test_lab_img)
     >>> t_gen = random_region_generator(in_data, out_data, (2, 2, 2), (0, 0,0))
     >>> i_dict, o_dict = _get_first(t_gen)
-    >>> for k,v in i_dict.items(): print(k,v.shape)
+    >>> kk = lambda x: x[0]
+    >>> for k,v in sorted(i_dict.items(), key = kk): print(k,v.shape)
     CT_Image (1, 2, 2, 2, 1)
     PET (1, 2, 2, 2, 1)
-    >>> for k,v in o_dict.items(): print(k,v.shape)
+    >>> for k,v in sorted(o_dict.items(), key = kk): print(k,v.shape)
     Labels (1, 2, 2, 2, 1)
-    >>> for key, val in i_dict.items(): print(key, val.mean())
+    >>> for k,v in sorted(i_dict.items(), key = kk): print(k, v.mean())
     CT_Image 0.0
     PET 2.5
     >>> for key, val in o_dict.items(): print(key, val.mean())
     Labels 0.5
-    >>> for key, val in i_dict.items(): pprint(val.squeeze())
+    >>> for key, val in sorted(i_dict.items(), key = kk): pprint(val.squeeze())
     [[[ 512.  512.]
       [-512. -512.]]
     <BLANKLINE>
@@ -146,17 +147,18 @@ def random_lesion_generator(in_image_dict,  # type: Dict[str,np.ndarray]
     >>> out_data = OrderedDict(Labels = _test_lab_img)
     >>> t_gen = random_lesion_generator(in_data, out_data, (2, 2, 2), (0, 0,0))
     >>> i_dict, o_dict = _get_first(t_gen)
-    >>> for k,v in i_dict.items(): print(k,v.shape)
+    >>> kk = lambda x: x[0]
+    >>> for k,v in sorted(i_dict.items(), key = kk): print(k,v.shape)
     CT_Image (1, 2, 2, 2, 1)
     PET (1, 2, 2, 2, 1)
     >>> for k,v in o_dict.items(): print(k,v.shape)
     Labels (1, 2, 2, 2, 1)
-    >>> for key, val in i_dict.items(): print(key, val.mean())
+    >>> for k,v in sorted(i_dict.items(), key = kk): print(k, v.mean())
     CT_Image 0.0
     PET 2.5
-    >>> for key, val in o_dict.items(): print(key, val.mean())
+    >>> for k,v in o_dict.items(): print(k, v.mean())
     Labels 0.5
-    >>> for key, val in i_dict.items(): pprint(val.squeeze())
+    >>> for k,v in sorted(i_dict.items(), key = kk): pprint(v.squeeze())
     [[[ 512.  512.]
       [-512. -512.]]
     <BLANKLINE>
@@ -238,12 +240,13 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
     >>> m_gen = batch_generator(t_gen, batch_size = 4, batch_dim = -1,add_dim = True)
     >>> for _,(v1, v2, v3) in zip(range(1), m_gen): print(v1.shape, v2.shape, v3.shape)
     (1, 2, 3, 4) (1, 2, 3, 4) (1, 2, 3, 4)
-    >>> f_gen = [(np.zeros((1,2,3)),)]*7
+    >>> f_gen = ([(np.zeros((1,2,3)),),]+[(np.ones((1,2,3)),),])*3
     >>> m_gen = batch_generator(f_gen, batch_size = 4, batch_dim = -1,add_dim = True)
-    >>> for _,[v1] in zip(range(3), m_gen): print(v1.shape)
-    (1, 2, 3, 4)
-    (1, 2, 3, 3)
+    >>> for _,[v1] in zip(range(3), m_gen): print(v1.shape, np.mean(v1, (0, 1, 2)))
+    (1, 2, 3, 4) [ 0.  1.  0.  1.]
+    (1, 2, 3, 2) [ 0.  1.]
     """
+
     def _package_cache(in_cache):
         temp_cols = [[] for c_ele in in_cache[0]]
         for c_row in in_cache:
@@ -255,6 +258,7 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
             c_func = lambda x: np.concatenate(x, axis=batch_dim)
 
         return [c_func(c_row) for c_row in temp_cols]
+
     cached_output = []
     for i, c_out in enumerate(in_gen, 1):
         cached_output += [c_out]
@@ -263,5 +267,5 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
             cached_output = []
     # ensure if there are any left over that we package them and return
     # correctly
-    if len(cached_output)>0:
+    if len(cached_output) > 0:
         yield _package_cache(cached_output)
