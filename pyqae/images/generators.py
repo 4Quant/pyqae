@@ -1,18 +1,22 @@
-from skimage.measure import label, regionprops
-from itertools import product
-import numpy as np
-from pyqae.utils import pprint # noinspection PyUnresolvedReferences
 # we need this tests otherwise dicts get all uppity and randomly swap things
-from collections import OrderedDict # noinspection PyUnresolvedReferences
+from collections import OrderedDict  # noinspection PyUnresolvedReferences
+from itertools import product
+
+import numpy as np
+from skimage.measure import label, regionprops
+
+from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 
 __doc__ = """
 This module is used for feeding image-based training data in 2/3D to a network.
 The general format being followed is that of the Keras generators but they are bit more specialized for medical data and preprocessing steps
 """
 
-_test_lab_img = np.expand_dims(np.expand_dims(np.stack([np.eye(3)] * 5, -1), -1), 0)
+_test_lab_img = np.expand_dims(
+    np.expand_dims(np.stack([np.eye(3)] * 5, -1), -1), 0)
 _test_ct_img = 1024 * _test_lab_img - 512
 _test_pet_img = 5 * _test_lab_img
+
 
 def label_trim(in_lab, trim_z, trim_x, trim_y):
     """
@@ -50,7 +54,9 @@ def label_zero_trim(in_lab, trim_z, trim_x, trim_y):
     '0.02'
     """
     new_lab = np.zeros_like(in_lab)
-    new_lab[:, trim_z:-trim_z, trim_x:-trim_x, trim_y:-trim_y] = in_lab[:, trim_z:-trim_z, trim_x:-trim_x,
+    new_lab[:, trim_z:-trim_z, trim_x:-trim_x, trim_y:-trim_y] = in_lab[:,
+                                                                 trim_z:-trim_z,
+                                                                 trim_x:-trim_x,
                                                                  trim_y:-trim_y]
     return new_lab
 
@@ -99,19 +105,26 @@ def random_region_generator(in_image_dict,  # type: Dict[str,np.ndarray]
     trim_x, trim_y, trim_z = trim_dim
     while True:
         for _, ref_image in zip(range(1), in_image_dict.values()):
-            c_img, z_p, x_p, y_p = [int(np.random.uniform(0, i - j)) for j, i in
-                                    zip([1, roi_z, roi_x, roi_y], ref_image.shape)]
-        gf = lambda x: x[c_img:(c_img + 1), z_p:(z_p + roi_z), x_p:(x_p + roi_x), y_p:(y_p + roi_y)]
+            c_img, z_p, x_p, y_p = [int(np.random.uniform(0, i - j)) for j, i
+                                    in
+                                    zip([1, roi_z, roi_x, roi_y],
+                                        ref_image.shape)]
+        gf = lambda x: x[c_img:(c_img + 1), z_p:(z_p + roi_z),
+                       x_p:(x_p + roi_x), y_p:(y_p + roi_y)]
 
         g_input = {lab_name: gf(lab_image)
-                 for lab_name, lab_image in in_image_dict.items()}
-        g_output = {lab_name: label_trim(gf(lab_image),trim_x=trim_x, trim_y=trim_y, trim_z=trim_z)
-                 for lab_name, lab_image in out_image_dict.items()}
+                   for lab_name, lab_image in in_image_dict.items()}
+        g_output = {
+            lab_name: label_trim(gf(lab_image), trim_x=trim_x, trim_y=trim_y,
+                                 trim_z=trim_z)
+            for lab_name, lab_image in out_image_dict.items()}
         yield g_input, g_output
+
 
 def _get_first(x):
     for ix in x:
         return ix
+
 
 def random_lesion_generator(in_image_dict,  # type: Dict[str,np.ndarray]
                             out_image_dict,  # type: Dict[str,np.ndarray]
@@ -178,7 +191,8 @@ def random_lesion_generator(in_image_dict,  # type: Dict[str,np.ndarray]
                     z_p += int(np.random.uniform(-rand_shift, rand_shift))
                     x_p += int(np.random.uniform(-rand_shift, rand_shift))
                     y_p += int(np.random.uniform(-rand_shift, rand_shift))
-                gf = lambda x: x[c_img:(c_img + 1), z_p:(z_p + roi_z), x_p:(x_p + roi_x), y_p:(y_p + roi_y)]
+                gf = lambda x: x[c_img:(c_img + 1), z_p:(z_p + roi_z),
+                               x_p:(x_p + roi_x), y_p:(y_p + roi_y)]
                 g_input = {lab_name: gf(lab_image)
                            for lab_name, lab_image in in_image_dict.items()}
                 g_output = {lab_name: label_trim(gf(lab_image), trim_x=trim_x,
@@ -196,3 +210,45 @@ def round_robin_gen(*gen_list):
     while True:
         for c_gen in gen_list:
             yield next(c_gen)
+
+
+def zero_gen(outputs, size=(1, 2, 3)):
+    while True:
+        yield [np.zeros(size) for i in range(outputs)]
+
+
+def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
+                    verbose=False):
+    """
+    Create batches from a generator output (useful for network training)
+    :param in_gen:
+    :param batch_size:
+    :param batch_dim:
+    :param add_dim:
+    :return:
+    >>> t_gen = zero_gen(2)
+    >>> for _,(v1, v2) in zip(range(1), t_gen): print(v1.shape, v2.shape)
+    (1, 2, 3) (1, 2, 3)
+    >>> n_gen = batch_generator(t_gen, batch_size = 8, verbose = True)
+    >>> for _,(v1, v2) in zip(range(1), n_gen): print(v1.shape, v2.shape)
+    (8, 2, 3) (8, 2, 3)
+    >>> t_gen = zero_gen(3)
+    >>> m_gen = batch_generator(t_gen, batch_size = 4, batch_dim = -1,add_dim = True)
+    >>> for _,(v1, v2, v3) in zip(range(1), m_gen): print(v1.shape, v2.shape, v3.shape)
+    (1, 2, 3, 4) (1, 2, 3, 4) (1, 2, 3, 4)
+    """
+    cached_output = []
+    for i, c_out in enumerate(in_gen, 1):
+        cached_output += [c_out]
+        if (i % batch_size) == 0:
+            temp_cols = [[] for c_ele in cached_output[0]]
+            for c_row in cached_output:
+                for j, c_col in enumerate(c_row):
+                    temp_cols[j] += [c_col]
+            if add_dim:
+                c_func = lambda x: np.stack(x, axis=batch_dim)
+            else:
+                c_func = lambda x: np.concatenate(x, axis=batch_dim)
+
+            yield [c_func(c_row) for c_row in temp_cols]
+            cached_output = []
