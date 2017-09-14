@@ -533,7 +533,7 @@ def pad_nd_image(in_img,  # type: np.ndarray
     """
     Pads an array to a specific size
     :param in_img:
-    :param out_shape: the desired outputs hape
+    :param out_shape: the desired outputs shape
     :param mode: the mode to use in numpy.pad
     :param kwargs: arguments for numpy.pad
     :return:
