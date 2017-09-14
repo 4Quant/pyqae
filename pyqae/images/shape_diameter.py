@@ -47,16 +47,34 @@ def get_all_radii(in_vol, in_vox_size):
     diameter_axial_edge_dist 5.0
     diameter_3d_edge_dist 4.0
     diameter_sphere 4.0
+    >>> bslice = np.expand_dims(ball(3)[ball(3).shape[0]//2],0)
+    >>> for i,k in get_all_radii(bslice, [1,1,1]).items(): print(i,k//1)
+    diameter_max_major_axial 6.0
+    diameter_axial_edge_dist 6.0
+    diameter_3d_edge_dist 6.0
+    diameter_sphere 3.0
+    >>> for i,k in get_all_radii(np.zeros((3,3,3)), [1,1,1]).items(): print(i,k//1)
+    diameter_max_major_axial 0
+    diameter_axial_edge_dist 0
+    diameter_3d_edge_dist 0
+    diameter_sphere -0.0
+    >>> sp_image = np.zeros((3,3,3))
+    >>> sp_image[1,1,1] = 1 # ensure it works on single point images / slices
+    >>> for i,k in get_all_radii(sp_image, [1,1,1]).items(): print(i,k//1)
+    diameter_max_major_axial 1
+    diameter_axial_edge_dist 2.0
+    diameter_3d_edge_dist 2.0
+    diameter_sphere 1.0
     """
     out_vals = OrderedDict()
     out_vals['diameter_max_major_axial'] = get_2d_major_axis(in_vol,
-                                                            in_vox_size)
-    out_vals['diameter_axial_edge_dist'] = 2*get_2d_max_edge_distance(in_vol,
-                                                                  in_vox_size)
-    out_vals['diameter_3d_edge_dist'] = 2*get_3d_max_edge_distance(in_vol,
-                                                               in_vox_size)
-    out_vals['diameter_sphere'] = 2*np.power(np.sum(in_vol>0)*np.prod(
-        in_vox_size)*3/(4*np.pi), 1/3.0)
+                                                             in_vox_size)
+    out_vals['diameter_axial_edge_dist'] = 2 * get_2d_max_edge_distance(in_vol,
+                                                                        in_vox_size)
+    out_vals['diameter_3d_edge_dist'] = 2 * get_3d_max_edge_distance(in_vol,
+                                                                     in_vox_size)
+    out_vals['diameter_sphere'] = 2 * np.power(np.sum(in_vol > 0) * np.prod(
+        in_vox_size) * 3 / (4 * np.pi), 1 / 3.0)
     return out_vals
 
 
@@ -73,6 +91,8 @@ def get_2d_major_axis(in_vol, in_vox_size, axis=0):
     12.0
     """
     ac_vol = autocrop(in_vol, 0)
+    if np.prod(ac_vol.shape) == 0:
+        return 0  # empty image
 
     if axis != 0: raise NotImplementedError(
         'Only axial radius is currently implemented')
@@ -81,13 +101,20 @@ def get_2d_major_axis(in_vol, in_vox_size, axis=0):
                                         old_vox_size=in_vox_size,
                                         new_vox_size=[1.0, 1.0, 1.0],
                                         order=2)
-    return np.max([
-        np.max([
-            creg.major_axis_length for creg in
-            regionprops((in_slice > 0.5).astype(int))
-        ])
-        for in_slice in rs_vol]
-    )
+
+    return np.max([1] +  # if the image is only 1 pixel
+                  [
+                      # calculate max slice by slice
+                      np.max([-1] + [
+                          # in the event there are multiple regions in a slice
+                          creg.major_axis_length for creg in
+                          regionprops((in_slice > 0.5).astype(int))
+                          # regionprops runs
+                          # squeeze and doesnt work on 1d points
+                      ])
+                      for in_slice in rs_vol if
+                      len(np.squeeze(in_slice).shape) > 1]
+                  )
 
 
 def get_2d_max_edge_distance(in_vol, in_vox_size, axis=0):
@@ -107,6 +134,9 @@ def get_2d_max_edge_distance(in_vol, in_vox_size, axis=0):
     if axis != 0: raise NotImplementedError(
         'Only axial radius is currently implemented')
     ac_vol = autocrop(in_vol, 0)
+    if np.prod(ac_vol.shape) == 0:
+        return 0  # empty image
+
     return np.max([np.max(distance_transform_edt(in_slice,
                                                  sampling=in_vox_size[
                                                           1:]).ravel())
@@ -129,6 +159,9 @@ def get_3d_max_edge_distance(in_vol, in_vox_size, resample=False):
     9.0
     """
     ac_vol = autocrop(in_vol, 0)
+    if np.prod(ac_vol.shape) == 0:
+        return 0  # empty image
+
     if resample:
         rs_vol, _ = change_resolution_array(ac_vol,
                                             old_vox_size=in_vox_size,
