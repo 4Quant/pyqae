@@ -1,6 +1,7 @@
 __doc__ = """
 A set of standard features we can calculate from images along with the 
-appropriate tests. Currently we use them for a series of lesion diamter proxies
+appropriate tests. Currently we use them for a series of lesion diameter 
+proxies
 """
 
 from collections import OrderedDict
@@ -69,10 +70,10 @@ def get_all_radii(in_vol, in_vox_size):
     out_vals = OrderedDict()
     out_vals['diameter_max_major_axial'] = get_2d_major_axis(in_vol,
                                                              in_vox_size)
-    out_vals['diameter_axial_edge_dist'] = 2 * get_2d_max_edge_distance(in_vol,
-                                                                        in_vox_size)
-    out_vals['diameter_3d_edge_dist'] = 2 * get_3d_max_edge_distance(in_vol,
-                                                                     in_vox_size)
+    out_vals['diameter_axial_edge_dist'] = get_2d_max_edge_distance(in_vol,
+                                                                    in_vox_size)
+    out_vals['diameter_3d_edge_dist'] = get_3d_max_edge_distance(in_vol,
+                                                                 in_vox_size)
     out_vals['diameter_sphere'] = 2 * np.power(np.sum(in_vol > 0) * np.prod(
         in_vox_size) * 3 / (4 * np.pi), 1 / 3.0)
     return out_vals
@@ -124,11 +125,11 @@ def get_2d_max_edge_distance(in_vol, in_vox_size, axis=0):
     :param in_vox_size:
     :return:
     >>> get_2d_max_edge_distance(ball(3), [1,1,1]) // 1
-    3.0
+    6.0
     >>> get_2d_max_edge_distance(ball(3), [2,1,1]) // 1
-    3.0
+    6.0
     >>> get_2d_max_edge_distance(ball(9), [1,1,1]) // 1
-    9.0
+    18.0
     """
     # for in_idx in range(in_vol.shape[axis]):
     if axis != 0: raise NotImplementedError(
@@ -137,10 +138,10 @@ def get_2d_max_edge_distance(in_vol, in_vox_size, axis=0):
     if np.prod(ac_vol.shape) == 0:
         return 0  # empty image
 
-    return np.max([np.max(distance_transform_edt(in_slice,
-                                                 sampling=in_vox_size[
-                                                          1:]).ravel())
-                   for in_slice in ac_vol])
+    return 2 * np.max([np.max(distance_transform_edt(in_slice,
+                                                     sampling=in_vox_size[
+                                                              1:]).ravel())
+                       for in_slice in ac_vol])
 
 
 def get_3d_max_edge_distance(in_vol, in_vox_size, resample=False):
@@ -152,11 +153,11 @@ def get_3d_max_edge_distance(in_vol, in_vox_size, resample=False):
     distance transform
     :return:
     >>> get_3d_max_edge_distance(ball(3), [1,1,1]) // 1
-    3.0
-    >>> get_3d_max_edge_distance(ball(3), [2,2,2]) // 1
     6.0
+    >>> get_3d_max_edge_distance(ball(3), [2,2,2]) // 1
+    12.0
     >>> get_3d_max_edge_distance(ball(9), [1,1,1]) // 1
-    9.0
+    18.0
     """
     ac_vol = autocrop(in_vol, 0)
     if np.prod(ac_vol.shape) == 0:
@@ -167,11 +168,11 @@ def get_3d_max_edge_distance(in_vol, in_vox_size, resample=False):
                                             old_vox_size=in_vox_size,
                                             new_vox_size=[1.0, 1.0, 1.0],
                                             order=2)
-        dmap = distance_transform_edt(rs_vol > 0.25)
+        dmap = distance_transform_edt(rs_vol > 0.5)
     else:
         dmap = distance_transform_edt(ac_vol, sampling=in_vox_size)
 
-    return np.max(dmap.ravel())
+    return 2 * np.max(dmap.ravel())
 
 
 def _simple_dmap_tests():
