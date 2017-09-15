@@ -21,7 +21,7 @@ WEIGHTS_PATH = "https://github.com/rcmalli/keras-squeezenet/releases/download/v1
 
 # Modular function for Fire Node
 
-def fire_module(x, fire_id, squeeze=16, expand=64):
+def fire_module(x, fire_id, squeeze=16, expand=64, fire_name = ''):
     """
     The fire module component of the SqueezeNet architecture
     :param x:
@@ -57,7 +57,7 @@ def fire_module(x, fire_id, squeeze=16, expand=64):
     Non-trainable params: 0
     ____________________________________________________________________________________________________
     """
-    s_id = 'fire' + str(fire_id) + '/'
+    s_id = 'fire%d%s/' % (fire_id, fire_name)
 
     if K.image_data_format() == 'channels_first':
         channel_axis = 1
@@ -88,7 +88,7 @@ def SqueezeNet(input_tensor=None, input_shape=None,
                first_stride=2,
                last_activation = 'softmax',
                 load_by_name = False,
-               sn_name = 'base'
+               sn_name = ''
                ):
     """
     The implementation of SqueezeNet in Keras
@@ -244,9 +244,9 @@ def SqueezeNet(input_tensor=None, input_shape=None,
     ____________________________________________________________________________________________________
     relu_conv10 (Activation)         (None, 2, 2, 1000)    0           conv10[0][0]
     ____________________________________________________________________________________________________
-    global_average_pooling2d_1 (Glob (None, 1000)          0           relu_conv10[0][0]
+    gap (GlobalAveragePooling2D)     (None, 1000)          0           relu_conv10[0][0]
     ____________________________________________________________________________________________________
-    loss (Activation)                (None, 1000)          0           global_average_pooling2d_1[0][0]
+    loss (Activation)                (None, 1000)          0           gap[0][0]
     ====================================================================================================
     Total params: 1,235,496
     Trainable params: 1,235,496
@@ -282,28 +282,29 @@ def SqueezeNet(input_tensor=None, input_shape=None,
         img_input = raw_img_input
 
     x = Convolution2D(64, (3, 3), strides=(first_stride, first_stride),
-                      padding='valid', name='conv1')(img_input)
-    x = Activation('relu', name='relu_conv1')(x)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool1')(x)
+                      padding='valid', name='conv1{}'.format(sn_name))(
+        img_input)
+    x = Activation('relu', name='relu_conv1{}'.format(sn_name))(x)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool1{}'.format(sn_name))(x)
 
-    x = fire_module(x, fire_id=2, squeeze=16, expand=64)
-    x = fire_module(x, fire_id=3, squeeze=16, expand=64)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool3')(x)
+    x = fire_module(x, fire_id=2, squeeze=16, expand=64, fire_name = sn_name)
+    x = fire_module(x, fire_id=3, squeeze=16, expand=64, fire_name = sn_name)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool3{}'.format(sn_name))(x)
 
-    x = fire_module(x, fire_id=4, squeeze=32, expand=128)
-    x = fire_module(x, fire_id=5, squeeze=32, expand=128)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool5')(x)
+    x = fire_module(x, fire_id=4, squeeze=32, expand=128, fire_name = sn_name)
+    x = fire_module(x, fire_id=5, squeeze=32, expand=128, fire_name = sn_name)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool5{}'.format(sn_name))(x)
 
-    x = fire_module(x, fire_id=6, squeeze=48, expand=192)
-    x = fire_module(x, fire_id=7, squeeze=48, expand=192)
-    x = fire_module(x, fire_id=8, squeeze=64, expand=256)
-    x = fire_module(x, fire_id=9, squeeze=64, expand=256)
-    x = Dropout(0.5, name='drop9')(x)
+    x = fire_module(x, fire_id=6, squeeze=48, expand=192, fire_name = sn_name)
+    x = fire_module(x, fire_id=7, squeeze=48, expand=192, fire_name = sn_name)
+    x = fire_module(x, fire_id=8, squeeze=64, expand=256, fire_name = sn_name)
+    x = fire_module(x, fire_id=9, squeeze=64, expand=256, fire_name = sn_name)
+    x = Dropout(0.5, name='drop9{}'.format(sn_name))(x)
 
-    x = Convolution2D(classes, (1, 1), padding='valid', name='conv10')(x)
-    x = Activation('relu', name='relu_conv10')(x)
-    x = GlobalAveragePooling2D()(x)
-    out = Activation(last_activation, name='loss')(x)
+    x = Convolution2D(classes, (1, 1), padding='valid', name='conv10{}'.format(sn_name))(x)
+    x = Activation('relu', name='relu_conv10{}'.format(sn_name))(x)
+    x = GlobalAveragePooling2D(name = 'gap{}'.format(sn_name))(x)
+    out = Activation(last_activation, name='loss{}'.format(sn_name))(x)
 
     # Ensure that the model takes into account
     # any potential predecessors of `input_tensor`.
@@ -312,7 +313,7 @@ def SqueezeNet(input_tensor=None, input_shape=None,
     else:
         inputs = raw_img_input
 
-    model = Model(inputs, out, name='squeezenet_{}'.format(sn_name))
+    model = Model(inputs, out, name='squeezenet{}'.format(sn_name))
 
     # load weights
     if weights == 'imagenet':
