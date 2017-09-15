@@ -87,7 +87,8 @@ def SqueezeNet(input_tensor=None, input_shape=None,
                use_bn_on_input=False,  # to avoid preprocessing
                first_stride=2,
                last_activation = 'softmax',
-                load_by_name = False
+                load_by_name = False,
+               sn_name = 'base'
                ):
     """
     The implementation of SqueezeNet in Keras
@@ -311,7 +312,7 @@ def SqueezeNet(input_tensor=None, input_shape=None,
     else:
         inputs = raw_img_input
 
-    model = Model(inputs, out, name='squeezenet')
+    model = Model(inputs, out, name='squeezenet_{}'.format(sn_name))
 
     # load weights
     if weights == 'imagenet':
