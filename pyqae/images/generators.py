@@ -226,7 +226,7 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
     NOTE: The output of the generator must be a list for a single ND array
     it will not work correctly
     :param in_gen: generator (iterable) to process
-    :param batch_size: the size of the batches to make
+    :param batch_size: the size of the batches to make (0/-1 is infinite sized batches)
     :param batch_dim: the dimension to batch long (default 0)
     :param add_dim: append the dimension to the matrix
     :return:
@@ -262,9 +262,10 @@ def batch_generator(in_gen, batch_size, batch_dim=0, add_dim=False,
     cached_output = []
     for i, c_out in enumerate(in_gen, 1):
         cached_output += [c_out]
-        if (i % batch_size) == 0:
-            yield _package_cache(cached_output)
-            cached_output = []
+        if batch_size>0:
+            if (i % batch_size) == 0:
+                yield _package_cache(cached_output)
+                cached_output = []
     # ensure if there are any left over that we package them and return
     # correctly
     if len(cached_output) > 0:

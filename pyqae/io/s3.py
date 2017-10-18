@@ -88,7 +88,7 @@ def _dummy_show_lines(in_k, n=2):
             print(line.strip())
 
 
-class with_url(object):
+class with_url_as_tempfile(object):
     """
     Context manager for an s3-based file so it's usable with "with" statement, and cleaned up afterwards
     >>> k = with_url(_test_region, _test_url, mode = 'r')

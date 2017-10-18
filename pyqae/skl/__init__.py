@@ -13,9 +13,9 @@ def order_preserving_test_split(*in_data,
     The challenge we want to solve here is having a consistent, reproducible
     train/test split as our dataset grows, so adding new datasets does not
     change
-    :param in_data:
-    :param test_size:
-    :param random_state:
+    :param in_data: the set of groups to split
+    :param test_size: the fraction (very approximate) of the group
+    :param random_state: offset for the hashes (helps to balance groups)
     :param id_ext_func: a function to extract the unique identifier for a list item
     :param id_idx: the input argument to determine the indexes on
     :return:
