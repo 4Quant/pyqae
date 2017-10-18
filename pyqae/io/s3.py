@@ -63,7 +63,7 @@ def list_from_bucket(region, bucket_name, **kwargs):
         yield (urljoin('s3://%s' % bucket_name, c_item.name), c_item)
 
 
-def get_url_as_key(region, in_url, **kwargs):
+def get_url_as_key(region, in_url, create_key = True, **kwargs):
     """
     A function for easily parsing a url and creating a key from it
     :param region:
@@ -79,7 +79,15 @@ def get_url_as_key(region, in_url, **kwargs):
     p_url = urlparse(in_url)
     assert p_url.scheme == 's3', "Only s3 paths are supported"
     c_bucket = get_bucket(region, p_url.netloc, **kwargs)
-    return c_bucket.get_key(p_url.path)
+    c_key = c_bucket.get_key(p_url.path)
+    if c_key is None:
+        if create_key:
+            return c_bucket.new_key(p_url.path)
+        else:
+            raise ValueError('Key {} does not exist at {}!'.format(p_url.path, in_url))
+
+    return c_key
+
 
 
 def _dummy_show_lines(in_k, n=2):
