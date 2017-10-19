@@ -2,7 +2,8 @@
 import os
 import tempfile
 from urllib.parse import urlparse
-
+from warnings import warn
+from pyqae.utils import get_error, pprint # noinspection PyUnresolvedReferences
 
 _test_url = 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'
 _test_region = 'eu-central-1'
@@ -19,7 +20,9 @@ def urljoin(*args):
     's3://mybucket/temp_file.npz'
     """
 
-    return "/".join(map(lambda x: str(x).rstrip('/') if not str(x).endswith(':/') else str(x), args))
+    return "/".join(map(
+        lambda x: str(x).rstrip('/') if not str(x).endswith(':/') else str(x),
+        args))
 
 
 def get_bucket(region,
@@ -42,8 +45,10 @@ def get_bucket(region,
     try:
         return conn.get_bucket(bucket_name)
     except Exception as e:
-        raise ValueError('{} bucket could not be found, available buckets: {}'.format(bucket_name,
-                                                                                      conn.get_all_buckets()))
+        raise ValueError(
+            '{} bucket could not be found, available buckets: {}'.format(
+                bucket_name,
+                conn.get_all_buckets()))
 
 
 def list_from_bucket(region, bucket_name, **kwargs):
@@ -63,7 +68,7 @@ def list_from_bucket(region, bucket_name, **kwargs):
         yield (urljoin('s3://%s' % bucket_name, c_item.name), c_item)
 
 
-def get_url_as_key(region, in_url, create_key = True, **kwargs):
+def get_url_as_key(region, in_url, create_key=True, **kwargs):
     """
     A function for easily parsing a url and creating a key from it
     :param region:
@@ -84,10 +89,10 @@ def get_url_as_key(region, in_url, create_key = True, **kwargs):
         if create_key:
             return c_bucket.new_key(p_url.path)
         else:
-            raise ValueError('Key {} does not exist at {}!'.format(p_url.path, in_url))
+            raise ValueError(
+                'Key {} does not exist at {}!'.format(p_url.path, in_url))
 
     return c_key
-
 
 
 def _dummy_show_lines(in_k, n=2):
@@ -99,7 +104,7 @@ def _dummy_show_lines(in_k, n=2):
 class with_url_as_tempfile(object):
     """
     Context manager for an s3-based file so it's usable with "with" statement, and cleaned up afterwards
-    >>> k = with_url(_test_region, _test_url, mode = 'r')
+    >>> k = with_url_as_tempfile(_test_region, _test_url, mode = 'r')
     >>> _dummy_show_lines(k)
     [NbConvertApp] Converting notebook staging.ipynb to html
     [NbConvertApp] Executing notebook with kernel: python3
@@ -139,3 +144,87 @@ def get_url_as_path(region, in_url, out_path, **kwargs):
     with open(out_path, 'wb') as w:
         c_key.get_file(w)
     return out_path
+
+
+from functools import wraps
+
+
+def wrap_s3_input(region,  # type: str
+                  arg_idx=0,
+                  arg_name=None,
+                  fail=True,
+                  **s3_args):
+    """
+    A function to wrap existing functions with s3 connectivity, it takes a
+    single input argument and transforms it to a local path by downloading
+    the file gives the function the new path and then deletes the temporary
+    file
+    :param region: the region for the s3 store
+    :param arg_idx: the argument index to replace (0 is the first argument)
+    :param arg_name: the name of the argument to replace (if arg_idx is none)
+    :param fail: if the argument cannot be found should the call fail
+    :param s3_args: additional arguments for s3
+    :return: a fancy new function
+    >>> fancy_func = wrap_s3_input(_test_region)(_dummy_read_file_lines)
+    >>> print(str(fancy_func)[:30])
+    <function _dummy_read_file_lin
+    >>> fancy_func(_test_url)
+    [NbConvertApp] Converting notebook staging.ipynb to html
+    [NbConvertApp] Executing notebook with kernel: python3
+    >>> get_error(fancy_func, in_path = _test_url) # only works for numbered
+    "Argument None/0 not in input arguments: {'in_path': 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'}"
+    >>> ancy_func = wrap_s3_input(_test_region, arg_idx = None, arg_name = 'in_path')(_dummy_read_file_lines)
+    >>> ancy_func(in_path = _test_url)
+    [NbConvertApp] Converting notebook staging.ipynb to html
+    [NbConvertApp] Executing notebook with kernel: python3
+    >>> ncy_func = wrap_s3_input(_test_region, arg_idx = None, arg_name = None)(_dummy_read_file_lines)
+    >>> get_error(ncy_func, in_path = _test_url)
+    "Argument None/None not in input arguments: {'in_path': 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'}"
+    >>> cy_func = wrap_s3_input(_test_region, arg_idx = None, arg_name = None, fail = False)(_dummy_read_file_lines)
+    >>> get_error(cy_func, in_path = _test_url)
+    "[Errno 2] No such file or directory: 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'"
+    """
+
+    def decorate(f):
+        @wraps(f)  # keep the metadata clean
+        def s3_f(*args, **kwargs):
+            remote_path = None
+            fix_args = lambda args, kwargs, new_path: (args, kwargs)
+            if arg_idx is not None:
+                if arg_idx < len(args):
+                    remote_path = args[arg_idx]
+
+                    def fix_args(args, kwargs, new_path):
+                        args = list(args)
+                        args[arg_idx] = new_path
+                        return tuple(args), kwargs
+            elif arg_name is not None:
+                if arg_name in kwargs:
+                    remote_path = kwargs.pop(arg_name)
+
+                    def fix_args(args, kwargs, new_path):
+                        kwargs[arg_name] = new_path
+                        return args, kwargs
+
+            if remote_path is None:
+                err_msg = 'Argument {}/{} not in input arguments: {}'.format(
+                    arg_name, arg_idx, kwargs)
+                if fail:
+                    raise ValueError(err_msg)
+                else:
+                    warn(err_msg, RuntimeWarning)
+                return f(*args, **kwargs)
+            with with_url_as_tempfile(region=region,
+                                      in_url=remote_path,
+                                      mode=None,
+                                      **s3_args) as new_path:
+                args, kwargs = fix_args(args, kwargs, new_path)
+                return f(*args, **kwargs)
+
+        return s3_f
+
+    return decorate
+
+
+def _dummy_read_file_lines(in_path):
+    return _dummy_show_lines(open(in_path, 'r'))
