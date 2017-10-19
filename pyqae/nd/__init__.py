@@ -688,6 +688,70 @@ def uniform_nd_bias_sampler(x_arr, count=1, base_p=0.5, axis=0,
                             replace=True, p=d_mat)
 
 
+def nsum(x, axis=None):
+    if axis is not None:
+        out_vec = np.sum(x, axis)
+    else:
+        out_vec = x
+    return out_vec / out_vec.sum()
+
+
+def weight_axis_sampler_2d(in_img, samples):
+    """
+    A function to picking samples by axis sums rather than first finding all the points.
+    The sampling works by first sampling x based on the sum across y and z and then sampling y given x and then z given x and y
+    :param in_img:
+    :param samples:
+    :return:
+    >>> xy_pts = weight_axis_sampler_2d(np.eye(4), 5)
+    >>> all([x==y for x,y in xy_pts])
+    True
+    """
+    out_pts = np.zeros((samples, 2), dtype = np.int32)
+    x_samples = np.random.choice(range(in_img.shape[0]),
+                                 replace=True,
+                                 size=samples,
+                                 p=nsum(in_img, 1))
+    out_pts[:, 0] = x_samples
+    for i, x in enumerate(x_samples):
+        y = np.random.choice(range(in_img.shape[1]),
+                             replace=True,
+                             size=1,
+                             p=nsum(in_img[x, :]))
+        out_pts[i, 1] = y
+    return out_pts
+
+
+def weight_axis_sampler_3d(in_vol, samples):
+    """
+    A function to picking samples by axis sums rather than first finding all the points
+    :param in_img:
+    :param samples:
+    :return:
+    >>> vol_3 = np.zeros((3,3,3))
+    >>> for i in range(3): vol_3[i,i,i] = 1
+    >>> xyz_pts = weight_axis_sampler_3d(vol_3, 5)
+    >>> all([x==y==z for x,y,z in xyz_pts])
+    True
+    """
+    out_pts = np.zeros((samples, 3), dtype = np.int32)
+    x_samples = np.random.choice(range(in_vol.shape[0]),
+                                 replace=True,
+                                 size=samples,
+                                 p=nsum(in_vol, (1, 2)))
+    out_pts[:, 0] = x_samples
+    for i, x in enumerate(x_samples):
+        y = np.random.choice(range(in_vol.shape[1]),
+                             size=1,
+                             p=nsum(in_vol[x], 1))[0]
+        z = np.random.choice(range(in_vol.shape[2]),
+                             size=1,
+                             p=nsum(in_vol[x, y]))[0]
+        out_pts[i, 1] = y
+        out_pts[i, 2] = z
+    return out_pts
+
+
 if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
