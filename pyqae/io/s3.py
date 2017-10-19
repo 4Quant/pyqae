@@ -3,7 +3,8 @@ import os
 import tempfile
 from urllib.parse import urlparse
 from warnings import warn
-from pyqae.utils import get_error, pprint # noinspection PyUnresolvedReferences
+
+from pyqae.utils import get_error  # noinspection PyUnresolvedReferences
 
 _test_url = 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'
 _test_region = 'eu-central-1'
@@ -153,6 +154,7 @@ def wrap_s3_input(region,  # type: str
                   arg_idx=0,
                   arg_name=None,
                   fail=True,
+                  verbose=False,
                   **s3_args):
     """
     A function to wrap existing functions with s3 connectivity, it takes a
@@ -163,6 +165,7 @@ def wrap_s3_input(region,  # type: str
     :param arg_idx: the argument index to replace (0 is the first argument)
     :param arg_name: the name of the argument to replace (if arg_idx is none)
     :param fail: if the argument cannot be found should the call fail
+    :param verbose: show extra messages (like when a path is local)
     :param s3_args: additional arguments for s3
     :return: a fancy new function
     >>> fancy_func = wrap_s3_input(_test_region)(_dummy_read_file_lines)
@@ -200,7 +203,7 @@ def wrap_s3_input(region,  # type: str
                         return tuple(args), kwargs
             elif arg_name is not None:
                 if arg_name in kwargs:
-                    remote_path = kwargs.pop(arg_name)
+                    remote_path = kwargs[arg_name]
 
                     def fix_args(args, kwargs, new_path):
                         kwargs[arg_name] = new_path
@@ -214,11 +217,29 @@ def wrap_s3_input(region,  # type: str
                 else:
                     warn(err_msg, RuntimeWarning)
                 return f(*args, **kwargs)
-            with with_url_as_tempfile(region=region,
-                                      in_url=remote_path,
-                                      mode=None,
-                                      **s3_args) as new_path:
-                args, kwargs = fix_args(args, kwargs, new_path)
+
+            p_url = urlparse(remote_path)
+            if verbose:
+                print('Parsed url {}'.format(p_url))
+
+            if len(p_url.scheme) < 1:
+                if verbose:
+                    print('Processing as local path: {}'.format(p_url))
+                return f(*args, **kwargs)
+
+            elif p_url.scheme in ['s3', 's3n']:
+                if verbose:
+                    print('Processing as s3 path: {}'.format(p_url))
+                with with_url_as_tempfile(region=region,
+                                          in_url=remote_path,
+                                          mode=None,
+                                          **s3_args) as new_path:
+                    args, kwargs = fix_args(args, kwargs, new_path)
+                    return f(*args, **kwargs)
+            else:
+                # TODO: add other backends (https, ftp?)
+                warn('Not sure how to process url {} -> {}'.format(
+                    remote_path, p_url), RuntimeWarning)
                 return f(*args, **kwargs)
 
         return s3_f
