@@ -7,8 +7,9 @@ from warnings import warn
 from pyqae.utils import get_error  # noinspection PyUnresolvedReferences
 
 _test_url = 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'
+_test_out_url = 's3://ls-sample-data/test.txt'
 _test_region = 'eu-central-1'
-_test_bucket = 'ls-annotations'
+_test_bucket = 'ls-sample-data'
 
 
 def urljoin(*args):
@@ -37,7 +38,7 @@ def get_bucket(region,
         important key names aws_access_key_id, aws_secret_access_key
     :return:
     >>> get_bucket(_test_region, _test_bucket)
-    <Bucket: ls-annotations>
+    <Bucket: ls-sample-data>
     """
 
     # aws_access_key_id=access, aws_secret_access_key=secret
@@ -62,7 +63,7 @@ def list_from_bucket(region, bucket_name, **kwargs):
     :return:
     >>> out_list = list_from_bucket(_test_region, _test_bucket)
     >>> print(next(out_list))
-    ('s3://ls-annotations/TestAws.zip', <Key: ls-annotations,TestAws.zip>)
+    ('s3://ls-sample-data/test.txt', <Key: ls-sample-data,test.txt>)
     """
     out_bucket = get_bucket(region, bucket_name, **kwargs)
     for c_item in out_bucket.list():
@@ -246,6 +247,118 @@ def wrap_s3_input(region,  # type: str
 
     return decorate
 
+def wrap_s3_output(region,  # type: str
+                  arg_idx=0,
+                  arg_name=None,
+                   suffix = '',
+                  fail=True,
+                  verbose=False,
+                  **s3_args):
+    """
+    A function to wrap existing functions with s3 connectivity, it takes a
+    single output argument and transforms it to a local path then uploads
+    the file created at the local path and then deletes the temporary file
+    file
+    :param region: the region for the s3 store
+    :param arg_idx: the argument index to replace (0 is the first argument)
+    :param arg_name: the name of the argument to replace (if arg_idx is none)
+    :param suffix: the suffix (if any, the temporary file should have)
+    :param fail: if the argument cannot be found should the call fail
+    :param verbose: show extra messages (like when a path is local)
+    :param s3_args: additional arguments for s3
+    :return: a fancy new function
+    >>> fancy_reader = wrap_s3_input(_test_region)(_dummy_read_file_lines)
+    >>> fancy_func = wrap_s3_output(_test_region)(_dummy_write_file_lines)
+    >>> print(str(fancy_func)[:30])
+    <function _dummy_write_file_li
+    >>> fancy_func(_test_out_url)
+    2017
+    >>> fancy_reader(_test_out_url)
+    just crap!
+    >>> get_error(fancy_func, in_path = _test_url) # only works for numbered
+    "Argument None/0 not in input arguments: {'in_path': 's3://ls-output/20170927/TNM_StagingD20170411T141157857101_by_ThomasW_of_ACC23381854/.run_success'}"
+    >>> ancy_func = wrap_s3_output(_test_region, arg_idx = None, arg_name = 'in_path')(_dummy_write_file_lines)
+    >>> ancy_func(in_path = _test_out_url)
+    2017
+    >>> ncy_func = wrap_s3_output(_test_region, arg_idx = None, arg_name = None)(_dummy_write_file_lines)
+    >>> get_error(ncy_func, in_path = _test_out_url)
+    "Argument None/None not in input arguments: {'in_path': 's3://ls-sample-data/test.txt'}"
+    >>> cy_func = wrap_s3_output(_test_region, arg_idx = None, arg_name = None, fail = False)(_dummy_write_file_lines)
+    >>> get_error(cy_func, in_path = _test_out_url)
+    "[Errno 2] No such file or directory: 's3://ls-sample-data/test.txt'"
+    """
 
+    def decorate(f):
+        @wraps(f)  # keep the metadata clean
+        def s3_f(*args, **kwargs):
+            remote_path = None
+            fix_args = lambda args, kwargs, new_path: (args, kwargs)
+            if arg_idx is not None:
+                if arg_idx < len(args):
+                    remote_path = args[arg_idx]
+
+                    def fix_args(args, kwargs, new_path):
+                        args = list(args)
+                        args[arg_idx] = new_path
+                        return tuple(args), kwargs
+            elif arg_name is not None:
+                if arg_name in kwargs:
+                    remote_path = kwargs[arg_name]
+
+                    def fix_args(args, kwargs, new_path):
+                        kwargs[arg_name] = new_path
+                        return args, kwargs
+
+            if remote_path is None:
+                err_msg = 'Argument {}/{} not in input arguments: {}'.format(
+                    arg_name, arg_idx, kwargs)
+                if fail:
+                    raise ValueError(err_msg)
+                else:
+                    warn(err_msg, RuntimeWarning)
+                return f(*args, **kwargs)
+
+            p_url = urlparse(remote_path)
+            if verbose:
+                print('Parsed url {}'.format(p_url))
+
+            if len(p_url.scheme) < 1:
+                if verbose:
+                    print('Processing as local path: {}'.format(p_url))
+                return f(*args, **kwargs)
+
+            elif p_url.scheme in ['s3', 's3n']:
+                if verbose:
+                    print('Processing as s3 path: {}'.format(p_url))
+                lcl_prefix = remote_path.encode('ascii').hex()[:20]
+                cur_temp_file = tempfile.mktemp(suffix=suffix, prefix=lcl_prefix)
+                args, kwargs = fix_args(args, kwargs, cur_temp_file)
+                out_val = f(*args, **kwargs)
+                remote_key = get_url_as_key(region = region,
+                                            in_url = remote_path,
+                                            create_key = True,
+                                            **s3_args)
+                remote_key.set_contents_from_filename(cur_temp_file)
+                try:
+                    os.remove(cur_temp_file)
+                except Exception as e:
+                    warn('Could not delete output file {} at {}'.format(e,
+                                                                        cur_temp_file), RuntimeWarning)
+                return out_val
+            else:
+                # TODO: add other backends (https, ftp?)
+                warn('Not sure how to process url {} -> {}'.format(
+                    remote_path, p_url), RuntimeWarning)
+                return f(*args, **kwargs)
+
+        return s3_f
+
+    return decorate
+
+
+def _dummy_write_file_lines(in_path):
+    with open(in_path, 'w') as f:
+        f.write('just crap!')
+    return 2017
 def _dummy_read_file_lines(in_path):
     return _dummy_show_lines(open(in_path, 'r'))
