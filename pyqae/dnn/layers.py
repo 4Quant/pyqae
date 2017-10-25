@@ -1504,3 +1504,4 @@ def label_time_zoom_tf(inp_batch,
         new_shape = inp_batch.get_shape()
         y.set_shape([new_shape[0], time_steps, x_size, y_size, new_shape[-1]])
         return y
+
