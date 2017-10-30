@@ -209,11 +209,15 @@ def remove_edge_objects(in_img):
     return clean_lung_comp
 
 
-def remove_small_and_sort_labels(in_lab_img, min_label_count):
+def remove_small_and_sort_labels(in_lab_img,
+                                 min_label_count=None,
+                                 max_label_count=None):
+    # type: (np.ndarray, Optional[int], Optional[int]) -> np.ndarray
     """
     Remove labels with fewer than a given number of voxels
     :param in_lab_img:
-    :param min_label_count:
+    :param min_label_count: minimum number of items in a label group
+    :param max_label_count: maximum number of items in a label group
     :return:
 
     >>> from skimage.measure import label
@@ -223,7 +227,8 @@ def remove_small_and_sort_labels(in_lab_img, min_label_count):
            [0, 1, 0],
            [0, 0, 1]])
     >>> np.random.seed(1234)
-    >>> remove_small_and_sort_labels(np.random.randint(0, 4, size = (8,8)), 1)
+    >>> rmat = np.random.randint(0, 4, size = (8,8))
+    >>> remove_small_and_sort_labels(rmat, 1)
     array([[1, 1, 2, 3, 0, 0, 0, 3],
            [1, 3, 1, 3, 2, 2, 1, 2],
            [0, 0, 2, 2, 2, 0, 0, 0],
@@ -232,13 +237,38 @@ def remove_small_and_sort_labels(in_lab_img, min_label_count):
            [1, 1, 0, 3, 1, 0, 1, 2],
            [1, 0, 3, 1, 1, 1, 2, 3],
            [2, 1, 1, 0, 2, 1, 2, 0]])
+    >>> remove_small_and_sort_labels(rmat, 1, 15)
+    array([[0, 0, 0, 1, 0, 0, 0, 1],
+           [0, 1, 0, 1, 0, 0, 0, 0],
+           [0, 0, 0, 0, 0, 0, 0, 0],
+           [1, 0, 1, 0, 0, 0, 0, 0],
+           [0, 0, 0, 1, 0, 0, 0, 0],
+           [0, 0, 0, 1, 0, 0, 0, 0],
+           [0, 0, 1, 0, 0, 0, 0, 1],
+           [0, 0, 0, 0, 0, 0, 0, 0]])
     """
     clean_lab_img = np.zeros_like(in_lab_img)
+
+    if min_label_count is not None:
+        min_label_func = lambda grp_label: (np.sum(in_lab_img == grp_label) >
+                                            min_label_count)
+    else:
+        min_label_func = lambda grp_label: True
+    if max_label_count is not None:
+        max_label_func = lambda grp_label: (np.sum(in_lab_img == grp_label) <
+                                            max_label_count)
+    else:
+        max_label_func = lambda grp_label: True
+
+    label_func = lambda grp_label: min_label_func(grp_label) & max_label_func(
+        grp_label)
+
     size_sorted_labels = sorted(filter(
-        lambda grp_label: np.sum(in_lab_img == grp_label) > min_label_count,
+        label_func,
         np.unique(in_lab_img[in_lab_img > 0])),
         key=lambda grp_label: -1 * np.sum(
             in_lab_img == grp_label))
+
     for new_label, old_label in enumerate(size_sorted_labels):
         clean_lab_img[in_lab_img == old_label] = new_label + 1
     return clean_lab_img
