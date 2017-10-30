@@ -249,19 +249,13 @@ def remove_small_and_sort_labels(in_lab_img,
     """
     clean_lab_img = np.zeros_like(in_lab_img)
 
-    if min_label_count is not None:
-        min_label_func = lambda grp_label: (np.sum(in_lab_img == grp_label) >
-                                            min_label_count)
-    else:
-        min_label_func = lambda grp_label: True
-    if max_label_count is not None:
-        max_label_func = lambda grp_label: (np.sum(in_lab_img == grp_label) <
-                                            max_label_count)
-    else:
-        max_label_func = lambda grp_label: True
-
-    label_func = lambda grp_label: min_label_func(grp_label) & max_label_func(
-        grp_label)
+    def label_func(grp_label):
+        count = np.sum(in_lab_img == grp_label)
+        if min_label_count is not None:
+            if count <= min_label_count: return False
+        if max_label_count is not None:
+            if count >= max_label_count: return False
+        return True
 
     size_sorted_labels = sorted(filter(
         label_func,
