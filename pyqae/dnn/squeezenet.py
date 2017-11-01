@@ -21,7 +21,7 @@ WEIGHTS_PATH = "https://github.com/rcmalli/keras-squeezenet/releases/download/v1
 
 # Modular function for Fire Node
 
-def fire_module(x, fire_id, squeeze=16, expand=64, fire_name = ''):
+def fire_module(x, fire_id, squeeze=16, expand=64, fire_name=''):
     """
     The fire module component of the SqueezeNet architecture
     :param x:
@@ -86,9 +86,9 @@ def SqueezeNet(input_tensor=None, input_shape=None,
                classes=1000,
                use_bn_on_input=False,  # to avoid preprocessing
                first_stride=2,
-               last_activation = 'softmax',
-                load_by_name = False,
-               sn_name = ''
+               last_activation='softmax',
+               load_by_name=False,
+               sn_name=''
                ):
     """
     The implementation of SqueezeNet in Keras
@@ -266,7 +266,7 @@ def SqueezeNet(input_tensor=None, input_shape=None,
                                       default_size=227,
                                       min_size=48,
                                       data_format=K.image_data_format(),
-                                      include_top=False)
+                                      require_flatten=False)
 
     if input_tensor is None:
         raw_img_input = Input(shape=input_shape)
@@ -285,25 +285,29 @@ def SqueezeNet(input_tensor=None, input_shape=None,
                       padding='valid', name='conv1{}'.format(sn_name))(
         img_input)
     x = Activation('relu', name='relu_conv1{}'.format(sn_name))(x)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool1{}'.format(sn_name))(x)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2),
+                     name='pool1{}'.format(sn_name))(x)
 
-    x = fire_module(x, fire_id=2, squeeze=16, expand=64, fire_name = sn_name)
-    x = fire_module(x, fire_id=3, squeeze=16, expand=64, fire_name = sn_name)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool3{}'.format(sn_name))(x)
+    x = fire_module(x, fire_id=2, squeeze=16, expand=64, fire_name=sn_name)
+    x = fire_module(x, fire_id=3, squeeze=16, expand=64, fire_name=sn_name)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2),
+                     name='pool3{}'.format(sn_name))(x)
 
-    x = fire_module(x, fire_id=4, squeeze=32, expand=128, fire_name = sn_name)
-    x = fire_module(x, fire_id=5, squeeze=32, expand=128, fire_name = sn_name)
-    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool5{}'.format(sn_name))(x)
+    x = fire_module(x, fire_id=4, squeeze=32, expand=128, fire_name=sn_name)
+    x = fire_module(x, fire_id=5, squeeze=32, expand=128, fire_name=sn_name)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2),
+                     name='pool5{}'.format(sn_name))(x)
 
-    x = fire_module(x, fire_id=6, squeeze=48, expand=192, fire_name = sn_name)
-    x = fire_module(x, fire_id=7, squeeze=48, expand=192, fire_name = sn_name)
-    x = fire_module(x, fire_id=8, squeeze=64, expand=256, fire_name = sn_name)
-    x = fire_module(x, fire_id=9, squeeze=64, expand=256, fire_name = sn_name)
+    x = fire_module(x, fire_id=6, squeeze=48, expand=192, fire_name=sn_name)
+    x = fire_module(x, fire_id=7, squeeze=48, expand=192, fire_name=sn_name)
+    x = fire_module(x, fire_id=8, squeeze=64, expand=256, fire_name=sn_name)
+    x = fire_module(x, fire_id=9, squeeze=64, expand=256, fire_name=sn_name)
     x = Dropout(0.5, name='drop9{}'.format(sn_name))(x)
 
-    x = Convolution2D(classes, (1, 1), padding='valid', name='conv10{}'.format(sn_name))(x)
+    x = Convolution2D(classes, (1, 1), padding='valid',
+                      name='conv10{}'.format(sn_name))(x)
     x = Activation('relu', name='relu_conv10{}'.format(sn_name))(x)
-    x = GlobalAveragePooling2D(name = 'gap{}'.format(sn_name))(x)
+    x = GlobalAveragePooling2D(name='gap{}'.format(sn_name))(x)
     out = Activation(last_activation, name='loss{}'.format(sn_name))(x)
 
     # Ensure that the model takes into account
@@ -322,7 +326,7 @@ def SqueezeNet(input_tensor=None, input_shape=None,
             'squeezenet_weights_tf_dim_ordering_tf_kernels.h5',
             WEIGHTS_PATH,
             cache_subdir='models')
-        model.load_weights(weights_path, by_name = load_by_name)
+        model.load_weights(weights_path, by_name=load_by_name)
         if K.backend() == 'theano':
             layer_utils.convert_all_kernels_in_model(model)
 
