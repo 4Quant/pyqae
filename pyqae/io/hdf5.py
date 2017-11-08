@@ -1,4 +1,5 @@
 """Tools for dealing with HDF5 data efficiently"""
+import collections
 import os
 from glob import glob
 from warnings import warn
@@ -6,7 +7,6 @@ from warnings import warn
 import h5py
 import numpy as np
 from tqdm import tqdm
-import collections
 
 
 def write_df_as_hdf(out_path, out_df, compression='gzip'):
@@ -91,6 +91,12 @@ class HDF5MatrixFolder:
     >>> hmat = HDF5MatrixFolder(o_path, 'data')
     >>> hmat.shape
     (20, 5, 4)
+    >>> hmat[:].shape # check reading everything works
+    (20, 5, 4)
+    >>> np.shape(hmat[0:20]) # check standard reading works
+    (20, 5, 4)
+    >>> np.shape(hmat[np.arange(20)]) # check that numpy arrays work
+    (20, 5, 4)
     >>> len(hmat)
     20
     >>> pprint(hmat[0])
@@ -108,19 +114,23 @@ class HDF5MatrixFolder:
     >>> from keras import backend as K
     >>> K.set_image_dim_ordering('tf')
     >>> from keras.models import Sequential
-    >>> from keras.layers import BatchNormalization
+    >>> from keras.layers import Activation
     >>> test_model = Sequential()
-    >>> test_model.add(BatchNormalization(input_shape = (5,4)))
-    >>> test_model.predict(hmat, verbose = True).shape
+    >>> test_model.add(Activation('linear', input_shape = (5,4)))
+    >>> test_model.predict(hmat, verbose = False).shape
+    (20, 5, 4)
+    >>> test_model.compile(optimizer = 'adam', loss = 'mse')
+    >>> _ = test_model.fit(hmat, hmat, epochs=1, verbose = False)
     >>> o_dir.cleanup()
     """
+
     def __init__(self,
                  datapath,
                  dataset,
                  start=0,
                  end=None,
                  normalizer=None,
-                 suffix = "h5"):
+                 suffix="h5"):
         self.shapes = {}
         # used to avoid opening a file more than once
         self.refs = {}
@@ -133,11 +143,8 @@ class HDF5MatrixFolder:
             raise RuntimeError("datapath argument has to be a list of paths "
                                "or glob pattern, got %s." % datapath)
 
-
-
-
         self.fnames = list(sorted(self.fnames))
-        if len(self.fnames)<1:
+        if len(self.fnames) < 1:
             raise ValueError('No matching hdf5 files found or provided, '
                              'suffix : {}'.format(suffix))
 
@@ -187,13 +194,13 @@ class HDF5MatrixFolder:
         elif isinstance(key, np.ndarray):
             if np.max(key) + self.start < self.end:
                 idx = (self.start + key).tolist()
-                idx = slice(np.min(idx), np.max(idx))
+                idx = slice(np.min(idx), np.max(idx) + 1)
             else:
                 raise IndexError
         elif isinstance(key, (list, tuple)):
             if max(key) + self.start < self.end:
                 idx = [x + self.start for x in key]
-                idx = slice(np.min(idx), np.max(idx))
+                idx = slice(np.min(idx), np.max(idx) + 1)
             else:
                 raise IndexError
         else:
@@ -224,4 +231,3 @@ class HDF5MatrixFolder:
     def shape(self):
         for c_shape in self.shapes.values():
             return (self.end - self.start,) + c_shape[1:]
-
