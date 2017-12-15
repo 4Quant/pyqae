@@ -1,3 +1,7 @@
+"""
+A set of Tensorflow-based layers and operations for including in models
+allowing meaningful spatial and medical information to be included in images
+"""
 from warnings import warn
 
 import numpy as np
@@ -9,11 +13,6 @@ from pyqae.dnn.superpixels import batch_slic_time
 from pyqae.nd import meshgridnd_like, get_bbox, apply_bbox
 from pyqae.nd.features import sorted_label
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
-
-__doc__ = """
-A set of Tensorflow-based layers and operations for including in models
-allowing meaningful spatial and medical information to be included in images
-"""
 
 
 def _setup_and_test(in_func, *in_arrs, is_list=False, round=False):
@@ -671,9 +670,10 @@ def obj_to_phi_np(seg_img,
                                  min_z_rad=min_z_rad,
                                  add_r=add_r)
 
+
 def obj_to_std_phi_np(seg_img,
-                  min_z_rad=0
-                  ):
+                      min_z_rad=0
+                      ):
     # type: (np.ndarray, float) -> np.ndarray
     """
     Create a phi mask from a given object
@@ -711,7 +711,7 @@ def obj_to_std_phi_np(seg_img,
     c_reg = regionprops((seg_img > 0).astype(int))[0]
     xx, yy, zz = meshgridnd_like(seg_img)
 
-    std_xyz = np.std([c_x[seg_img > 0] for c_x in [xx, yy, zz]],1)
+    std_xyz = np.std([c_x[seg_img > 0] for c_x in [xx, yy, zz]], 1)
     return generate_phi_coord_np(seg_img,
                                  centroid=c_reg.centroid,
                                  std_xyz=std_xyz,
@@ -1122,7 +1122,7 @@ def batch_label_time(in_batch,  # type: np.ndarray
         c_label = label(c_img[..., channel] > channel_thresh, **label_args)[0]
         for j in range(time_steps):
             out_batch[i, j, :, :, 0] = (
-                c_label == (j + 1))  # don't include j=0
+                    c_label == (j + 1))  # don't include j=0
     return out_batch
 
 
@@ -1504,4 +1504,3 @@ def label_time_zoom_tf(inp_batch,
         new_shape = inp_batch.get_shape()
         y.set_shape([new_shape[0], time_steps, x_size, y_size, new_shape[-1]])
         return y
-

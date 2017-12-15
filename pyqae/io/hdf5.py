@@ -9,7 +9,33 @@ import numpy as np
 from tqdm import tqdm
 
 
-def write_df_as_hdf(out_path, out_df, compression='gzip'):
+def write_df_as_hdf(out_path,
+                    out_df,
+                    compression='gzip'):
+    """
+    Creates a hdf5 file from a dataframe by stacking all of the values
+    Requires that all of the rows (and items in the rows) for a given column
+    have the same dimension
+    :param out_path:
+    :param out_df:
+    :param compression:
+    :return:
+    >>> from tempfile import TemporaryDirectory
+    >>> from pyqae.utils import get_error, pprint
+    >>> import pandas as pd
+    >>> t_list = [dict(k = 0, v = np.eye(3)), dict(k = 2, v = 2*np.eye(3))]
+    >>> simple_df = pd.DataFrame(t_list)
+    >>> o_dir = TemporaryDirectory()
+    >>> o_path = o_dir.name
+    >>> t_file = os.path.join(o_path, 't.h5')
+    >>> write_df_as_hdf(t_file, simple_df)
+    >>> f = h5py.File(t_file, 'r')
+    >>> for k,v in f.items(): print(k,v.shape)
+    k (2,)
+    v (2, 3, 3)
+    >>> f.close()
+    >>> o_dir.cleanup()
+    """
     with h5py.File(out_path, 'w') as h:
         for k, arr_dict in tqdm(out_df.to_dict().items()):
             try:
