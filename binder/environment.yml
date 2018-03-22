@@ -1,0 +1,45 @@
+name: pyqae_base
+channels:
+  - damianavila82
+  - satra
+  - menpo
+  - pluraldatum
+  - glemaitre
+  - soumith
+  - conda-forge
+  - defaults
+  - simpleitk
+dependencies:
+  - python>=3.6
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - bokeh
+  - rise
+  - notebook>=5.2.2
+  - ipywidgets>=6.0.1
+  - ipython>=6.2.1
+  - pydot
+  - h5py
+  - scikit-image<=0.20
+  - scikit-learn<=0.20
+  - pytorch<=0.3.0
+  - torchvision
+  - opencv3>=3.0
+  - tensorflow
+  - itk
+  - SimpleITK
+  - ipyvolume
+  - pip:
+    - keras<=3.0
+    - git+https://github.com/keras-team/keras-contrib
+    - lime==0.1.1.29
+    - plotly==2.1.0
+    - seaborn==0.7.1
+    - tpot==0.9.0
+    - pydot
+    - dask_ndfilters
+    - graphviz
+    - appmode
+    - cloudpickle

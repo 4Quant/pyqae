@@ -1,3 +1,10 @@
+"""
+A set of neural networks used to generate relevant features for further
+analysis. The outputs of the models are meant to be fed into different
+models as they provide a better (fully-differentiable) representation which
+can be easier for learning and better incorporate relevant spatial features
+"""
+
 import itertools as itt
 
 import keras.backend as K
@@ -18,13 +25,6 @@ from pyqae.dnn.layers import gkern_nd, gkern_tf
 from pyqae.dnn.layers import label_2d_to_time_tf, label_time_zoom_tf, slic_2d_to_time_tf
 from pyqae.utils import pprint, \
     get_error  # noinspection PyUnresolvedReferences
-
-__doc__ = """
-A set of neural networks used to generate relevant features for further
-analysis. The outputs of the models are meant to be fed into different
-models as they provide a better (fully-differentiable) representation which
-can be easier for learning and better incorporate relevant spatial features
-"""
 
 import tensorflow as tf
 from warnings import warn
@@ -277,8 +277,8 @@ def PhiComGrid2DLayer(z_rad,
     3 coordinates
     :param z_rad: the radius near the middle to black out (force 0)
     :param args:
-    :param r_scale: the value for rescaling the r axis for using the 
-    standard deviations 
+    :param r_scale: the value for rescaling the r axis for using the
+    standard deviations
     :return:
     >>> from keras.models import Sequential
     >>> t_model = Sequential()

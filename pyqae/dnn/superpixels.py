@@ -1,12 +1,13 @@
+"""
+Here we package all of the code for super pixel analysis, more for tests
+than real usage
+"""
+
 import numpy as np
 from skimage.segmentation import slic
 from pyqae.utils import pprint  # noinspection PyUnresolvedReferences
 from warnings import warn
 
-__doc__ = """
-Here we package all of the code for super pixel analysis, more for tests 
-than real usage
-"""
 
 def batch_slic_time(in_batch, # type: np.ndarray
                      time_steps, # type: int
@@ -223,5 +224,3 @@ def slic_seg_model(input_shape = (None, None, 2),
         name='FinalCrop')(out_segs)
     return Model(inputs=[input_slice],
                  outputs=[last_layer], name = 'TestSLICModel')
-
-
