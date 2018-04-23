@@ -1,7 +1,10 @@
 from collections import namedtuple
 
 import numpy as np
-from dicom import read_file as dicom_simple_read
+try:
+    from dicom import read_file as dicom_simple_read
+except ImportError:
+    from pydicom import read_file as dicom_simple_read
 
 DicomSlice = namedtuple('DicomSlice', ['PixelSpacing', 'SliceLocation', 'SliceThickness', 'pixel_array'])
 

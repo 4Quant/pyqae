@@ -20,6 +20,7 @@ _setup()
 
 from glob import glob
 from pyqae.backend import SparkContext, SQLContext
+from pydicom import read_file as read_dicom_file
 
 __version__ = '0.2'
 

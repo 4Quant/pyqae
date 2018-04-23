@@ -1,8 +1,10 @@
 wget http://mirrors.ocf.berkeley.edu/apache/spark/spark-2.3.0/spark-2.3.0-bin-hadoop2.7.tgz
 tar -xzf spark-2.3.0-bin-hadoop2.7.tgz
+rm spark-2.3.0-bin-hadoop2.7.tgz
 # set spark home and pyspark paths
 SPARK_HOME=$HOME/spark-2.3.0-bin-hadoop2.7
 export PATH=$SPARK_HOME/bin:$PATH
 export PYTHONPATH=$SPARK_HOME/python:$PYTHONPATH
 export PYSPARK_SUBMIT_ARGS="--master local[*] pyspark-shell"
 jupyter serverextension enable --py nbserverproxy
+pip install .
