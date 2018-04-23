@@ -1,9 +1,8 @@
 language: python
 
 python:
-  - "2.7"
   - "3.4"
-  - "3.5"
+  - "3.6"
 
 jdk:
   - openjdk7
@@ -23,7 +22,7 @@ install:
   - conda update -q conda
   - conda info -a
   - conda create --yes -q -n test python=$TRAVIS_PYTHON_VERSION pip numpy scipy pytest boto
-  - conda env update -n pyqae -f binder/environment.yml
+  - conda env update -n test -f binder/environment.yml
   - source activate test
   - pip install .
   - pip install -r requirements-dev.txt
