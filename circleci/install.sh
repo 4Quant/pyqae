@@ -7,7 +7,7 @@ fi
 
 sudo apt-get update -y
 sudo apt-get install -y --no-install-recommends graphviz
-sudo apt-get install -y --no-install-recommends openjdk-9-jre-headless
+sudo apt-get install -y --no-install-recommends openjdk-8-jre-headless
 
 # Use the miniconda installer for faster download / install of conda
 # itself
