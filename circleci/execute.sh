@@ -11,6 +11,8 @@ python --version
 python -c "import numpy; print('numpy %s' % numpy.__version__)"
 python -c "import scipy; print('scipy %s' % scipy.__version__)"
 
+. ${PYQAE_HOME}/run-tests.sh
+
 # Generating notebooks
 for nb in notebooks/*ipynb; do
     jupyter nbconvert --ExecutePreprocessor.timeout=3600 --execute "$nb" --to markdown |& tee nb_to_md.txt
@@ -19,8 +21,6 @@ for nb in notebooks/*ipynb; do
         exit 1
     fi
 done
-
-. ${PYQAE_HOME}/run-tests.sh
 
 # Generating pipeline notebooks
 for nb in notebooks/Pipelines/*ipynb; do
