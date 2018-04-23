@@ -31,6 +31,8 @@ dependencies:
   - itk
   - SimpleITK
   - ipyvolume
+  - spacy
+  - xlwt
   - pip:
     - keras<=3.0
     - git+https://github.com/keras-team/keras-contrib
