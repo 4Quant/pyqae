@@ -44,3 +44,5 @@ dependencies:
     - graphviz
     - appmode
     - cloudpickle
+    - pyspark
+    - findspark

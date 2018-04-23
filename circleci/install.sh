@@ -7,6 +7,7 @@ fi
 
 sudo apt-get update -y
 sudo apt-get install -y --no-install-recommends graphviz
+sudo apt-get install -y --no-install-recommends openjdk-9-jre-headless
 
 # Use the miniconda installer for faster download / install of conda
 # itself
@@ -39,6 +40,8 @@ export PYQAE_HOME=$(pwd)
 
 conda install --yes jupyter
 pip install pdoc==0.3.2 pygments
+
+sh binder/postBuild
 
 # importing matplotlib once builds the font caches. This avoids
 # having warnings in our example notebooks

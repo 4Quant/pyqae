@@ -1,0 +1,2 @@
+wget http://mirror.switch.ch/mirror/apache/dist/spark/spark-2.3.0/spark-2.3.0-bin-hadoop2.7.tgz
+tar -xzf spark-2.3.0-bin-hadoop2.7.tgz
