@@ -1,6 +1,10 @@
 export PATH="$HOME/miniconda3/bin:$PATH"
 source activate pyqae
 export PYQAE_HOME=$(pwd)
+# add pyspark code
+export PATH=$SPARK_HOME/bin:$PATH
+export PYTHONPATH=$SPARK_HOME/python:$PYTHONPATH
+export PYSPARK_SUBMIT_ARGS="--master local[*] pyspark-shell"
 
 python --version
 python -c "import numpy; print('numpy %s' % numpy.__version__)"
