@@ -22,13 +22,6 @@ for nb in notebooks/*ipynb; do
     fi
 done
 
-# Generating pipeline notebooks
-for nb in notebooks/Pipelines/*ipynb; do
-    jupyter nbconvert --ExecutePreprocessor.timeout=3600 --execute "$nb" --to markdown |& tee nb_to_md.txt
-    traceback=$(grep "Traceback (most recent call last):" nb_to_md.txt)
-    # we don't crash on error for the other notebooks
-done
-
 cd ~
 mkdir -p ${PYQAE_HOME}/doc
 mkdir -p ${PYQAE_HOME}/doc/notebooks
