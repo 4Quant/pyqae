@@ -21,7 +21,7 @@ install:
   - conda update -q conda
   - conda info -a
   - conda create --yes -q -n test python=$TRAVIS_PYTHON_VERSION pip numpy scipy pytest boto
-  - conda env update -n test -f binder/environment.yml
+  - conda env update -n test -f binder/environment.yml -q
   - source activate test
   - pip install .
   - pip install -r requirements-dev.txt
