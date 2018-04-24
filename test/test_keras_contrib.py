@@ -32,8 +32,8 @@ def test_instancenorm(eng):
 
     # Create the Keras model, and InstanceNormalization
     model = Sequential()
-    model.add(InstanceNormalization())
-    model.add(Dense(100, input_shape=(10,)))
+    model.add(InstanceNormalization(input_shape=(10,)))
+    model.add(Dense(100))
 
     # Compile and fit on random data
     model.compile(loss='mse', optimizer='adam')
