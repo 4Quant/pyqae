@@ -40,6 +40,7 @@ export PYQAE_HOME=$(pwd)
 
 conda install --yes jupyter
 pip install pdoc==0.3.2 pygments
+pip install -r requirements-dev.txt
 
 sh binder/postBuild
 

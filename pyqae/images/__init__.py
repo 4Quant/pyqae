@@ -5,10 +5,6 @@ import numpy as np
 import requests
 from PIL import Image as PImage
 
-from .images import Images
-from .readers import (fromlist, fromarray, frompng, fromrdd,
-                      fromtif, frombinary, fromexample, fromrandom)
-
 
 def pull_img_http(base_url):
     response = requests.get(base_url)

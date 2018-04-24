@@ -2,8 +2,6 @@ import pytest
 import os
 resources = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources')
 
-
-
 def test_backends():
     from pyqae.images.lazy import backends, DiskMappedLazyImage
     # check boundary issues for tiles

@@ -161,7 +161,7 @@ def add_com_grid_3d_tf(in_layer,
                        as_r_vec=False,
                        r_scale=1.0
                        ):
-    # type: (tf.Tensor, bool, bool) -> tf.Tensor
+    # type: (tf.Tensor, bool, bool, float) -> tf.Tensor
     """
     Adds spatial grids to images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
@@ -535,14 +535,14 @@ def phi_coord_2d_tf(r_img,  # type: tf.Tensor
         return tf.concat(out_vec, -1)
 
 
-def add_com_phi_grid_3d_tf(in_layer,
+def add_com_phi_grid_3d_tf(in_layer, # type: tf.Tensor
                            layer_concat=False,
                            z_rad=0.0,
                            include_r=False,
                            include_ir=False,
                            r_scale=1.0
                            ):
-    # type: (tf.Tensor, bool, float, bool, bool) -> tf.Tensor
+    # type: (...) -> tf.Tensor
     """
     Adds spatial phi grids to 3d images for making segmentation easier
     This particular example utilizes the image-weighted center of mass by
