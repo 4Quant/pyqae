@@ -1,6 +1,10 @@
-$ cat .gitignore
 *.pyc
 .idea
+*.pdf
+*.pyc
+*.rst
+*.tgz
+*.html
 .idea_modules
 .DS_Store
 thunder.iml
@@ -15,12 +19,10 @@ doc/build
 doc/source/generated
 doc/source/tutorials/build
 doc/source/tutorials/source/.ipynb_checkpoints
-
+doc/*
 doc/generated
 *.iml
 thunder/lib/*dev*.egg
-
 .coverage*
-
 .cache
 .Rproj.user
