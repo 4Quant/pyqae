@@ -13,19 +13,6 @@ try:
 except ImportError:
     print("List from typing is missing but not really needed")
 
-
-    # junk variables
-    # noinspection PyPep8Naming
-    def List():
-        raise RuntimeError("This should not be used for anything")
-
-
-    Tuple = List
-    Optional = List
-    Any = List
-    Union = List
-    Dict = List
-
 try:
     from tqdm import tqdm as fancy_progress_bar
 except ImportError:
@@ -33,9 +20,30 @@ except ImportError:
     fancy_progress_bar = lambda x: x
 
 
+def verbosetest(func):
+    import doctest
+    import copy
+    globs = copy.copy(globals())
+    globs.update({func.__name__: func})
+    doctest.run_docstring_examples(
+        func, globs, verbose=False, name=func.__name__)
+    return func
+
+
+def autodoctest(func):
+    import doctest
+    import copy
+    globs = copy.copy(globals())
+    globs.update({func.__name__: func})
+    doctest.run_docstring_examples(
+        func, globs, verbose=False, name=func.__name__)
+    return func
+
+
 def get_temp_filename(suffix):
     with NamedTemporaryFile(suffix=suffix) as w:
         return w.name
+
 
 def _test_temp_dir():
     import os
@@ -45,8 +53,9 @@ def _test_temp_dir():
         with open(os.path.join(f, 'simple.txt'), 'r') as rfile:
             out_str = rfile.read()
             print(out_str)
-            assert int(out_str)==12345 , 'Strings should'
-    assert os.path.exists(os.path.join(f, 'simple.txt')) == False, "Temporary directory should be deleted"
+            assert int(out_str) == 12345, 'Strings should'
+    assert os.path.exists(os.path.join(f,
+                                       'simple.txt')) == False, "Temporary directory should be deleted"
 
 
 class NamedTemporaryDirectory(object):
@@ -55,6 +64,7 @@ class NamedTemporaryDirectory(object):
     >>> _test_temp_dir()
     12345
     """
+
     def __enter__(self):
         self.name = tempfile.mkdtemp()
         return self.name
@@ -90,9 +100,12 @@ class TypeTool(object):
             else:
                 return ctype_name
 
+
 from warnings import warn
 
-def try_default(errors=(Exception, ), default_value='', verbose = False, warning = False):
+
+def try_default(errors=(Exception,), default_value='', verbose=False,
+                warning=False):
     """
     A decorator for making failing functions easier to use
     :param errors:
@@ -103,26 +116,31 @@ def try_default(errors=(Exception, ), default_value='', verbose = False, warning
     Failed calling _always_fail with :('hey',),{'bob': 'not_happy'}, because of ValueError('I always fail',)
     -1
     """
+
     def decorator(func):
         def new_func(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
             except errors as e:
                 if verbose:
-                    out_msg = "Failed calling {} with :{},{}, because of {}".format(func.__name__,
-                                                                             args, kwargs, repr(e))
+                    out_msg = "Failed calling {} with :{},{}, because of {}".format(
+                        func.__name__,
+                        args, kwargs, repr(e))
                     if warning:
                         warn(out_msg, RuntimeWarning)
                     else:
                         print(out_msg)
                 return default_value
+
         return new_func
 
     return decorator
 
-@try_default(default_value = -1, verbose = True, warning = False)
+
+@try_default(default_value=-1, verbose=True, warning=False)
 def _always_fail(*args, **kwargs):
     raise ValueError("I always fail")
+
 
 def local_read_depth(in_folder, depth, ext='.dcm', inc_parent=False):
     """
@@ -170,6 +188,7 @@ from itertools import chain
 
 pprint = lambda x, p=2: print(np.array_str(x, max_line_width=80, precision=
 p))
+
 
 def get_error(f, **kwargs):
     try:
@@ -361,63 +380,3 @@ def check_spark():
         from pyspark import SparkContext
     finally:
         return SparkContext
-
-
-def check_options(option, valid):
-    if option not in valid:
-        raise ValueError(
-            "Option must be one of %s, got '%s'" % (str(valid)[1:-1], option))
-
-
-def check_path(path, credentials=None):
-    """
-    Check that specified output path does not already exist
-
-    The ValueError message will suggest calling with overwrite=True;
-    this function is expected to be called from the various output methods
-    that accept an 'overwrite' keyword argument.
-    """
-    from pyqae.readers import get_file_reader
-    reader = get_file_reader(path)(credentials=credentials)
-    existing = reader.list(path, directories=True)
-    if existing:
-        raise ValueError(
-            'Path %s appears to already exist. Specify a new directory, '
-            'or call with overwrite=True to overwrite.' % path)
-
-
-def connection_with_anon(credentials, anon=True):
-    """
-    Connect to S3 with automatic handling for anonymous access.
-
-    Parameters
-    ----------
-    credentials : dict
-        AWS access key ('access') and secret access key ('secret')
-
-    anon : boolean, optional, default = True
-        Whether to make an anonymous connection if credentials fail to authenticate
-    """
-    from boto.s3.connection import S3Connection
-    from boto.exception import NoAuthHandlerFound
-
-    try:
-        conn = S3Connection(aws_access_key_id=credentials['access'],
-                            aws_secret_access_key=credentials['secret'])
-        return conn
-
-    except NoAuthHandlerFound:
-        if anon:
-            conn = S3Connection(anon=True)
-            return conn
-        else:
-            raise
-
-
-def connection_with_gs(name):
-    """
-    Connect to GS
-    """
-    import boto
-    conn = boto.storage_uri(name, 'gs')
-    return conn

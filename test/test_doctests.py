@@ -32,6 +32,14 @@ def test_nd():
     from pyqae import nd
     doctest.testmod(nd, verbose=True)
 
+def test_skl():
+    from pyqae import skl
+    doctest.testmod(skl, verbose=True)
+
+def test_nlp():
+    from pyqae import nlp
+    doctest.testmod(nlp, verbose=True)
+
 
 if __name__ == "__main__":
     test_nd()
