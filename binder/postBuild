@@ -1,3 +1,6 @@
+mkdir $HOME/.jupyter
+echo "c.NotebookApp.iopub_data_rate_limit=1e22" >> $HOME/.jupyter/jupyter_notebook_config.py
+
 wget http://mirrors.ocf.berkeley.edu/apache/spark/spark-2.3.0/spark-2.3.0-bin-hadoop2.7.tgz
 tar -xzf spark-2.3.0-bin-hadoop2.7.tgz
 rm spark-2.3.0-bin-hadoop2.7.tgz
@@ -6,5 +9,10 @@ SPARK_HOME=$HOME/spark-2.3.0-bin-hadoop2.7
 export PATH=$SPARK_HOME/bin:$PATH
 export PYTHONPATH=$SPARK_HOME/python:$PYTHONPATH
 export PYSPARK_SUBMIT_ARGS="--master local[*] pyspark-shell"
+# enable appmode for nice demos
+jupyter nbextension enable --py --sys-prefix widgetsnbextension
+jupyter nbextension     enable --py --sys-prefix appmode
+jupyter serverextension enable --py --sys-prefix appmode
+# enable nbserver
 jupyter serverextension enable --py nbserverproxy
 pip install .

@@ -3,12 +3,6 @@ The code managing the backend (simplespark or pyspark) and making them as interc
 """
 import warnings
 import os
-if 'SPARK_HOME' not in os.environ:
-    try:
-        import findspark
-        findspark.init()
-    except Exception as e:
-        print('findspark could not be initialized')
 
 try:
     # These are only available inside of the pyspark application (using py4j)
@@ -22,7 +16,8 @@ try:
     import pyspark.sql.types as sq_types
 
 except ImportError:
-    warnings.warn("Pyspark is not available using simplespark backend instead", ImportWarning)
+    warnings.warn("Pyspark is not available using simplespark backend instead",
+                  ImportWarning)
     from pyqae.simplespark import Row
     from pyqae.simplespark import LocalRDD as RDD
     from pyqae.simplespark import LocalSparkContext as SparkContext
