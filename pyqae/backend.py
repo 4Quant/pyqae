@@ -4,10 +4,12 @@ The code managing the backend (simplespark or pyspark) and making them as interc
 import warnings
 import os
 if 'SPARK_HOME' not in os.environ:
-    os.environ['SPARK_HOME'] = os.path.join(os.path.expandvars('$HOME'), 'spark-2.3.0-bin-hadoop2.7')
-    import findspark
-    findspark.init()
-    
+    try:
+        import findspark
+        findspark.init()
+    except Exception as e:
+        print('findspark could not be initialized')
+
 try:
     # These are only available inside of the pyspark application (using py4j)
     from pyspark.sql import Row

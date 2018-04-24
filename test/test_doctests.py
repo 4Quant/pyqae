@@ -49,6 +49,7 @@ if __name__ == "__main__":
     test_sitk()
     test_viz()
     test_med()
+    test_nlp()
 
 
 

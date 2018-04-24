@@ -93,11 +93,3 @@ PYSPARK_PYTHON=/Users/mader/anaconda/envs/py27/bin/python PYSPARK_DRIVER_PYTHON=
 ```bash
 PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS=notebook /Volumes/ExDisk/spark-2.0.0-bin-hadoop2.7/bin/pyspark
 ```
-
-## contributing
-
-Thunder is a community effort! The codebase so far is due to the excellent work of the following individuals:
-
-> Andrew Osheroff, Ben Poole, Chris Stock, Davis Bennett, Jascha Swisher, Jason Wittenbach, Jeremy Freeman, Josh Rosen, Kunal Lillaney, Logan Grosenick, Matt Conlen, Michael Broxton, Noah Young, Ognen Duzlevski, Richard Hofer, Owen Kahn, Ted Fujimoto, Tom Sainsbury, Uri Laseron, W J Liddy
-
-If you run into a problem, have a feature request, or want to contribute, submit an issue or a pull request, or come talk to us in the [chatroom](https://gitter.im/thunder-project/thunder)!
