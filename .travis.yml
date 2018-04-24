@@ -23,8 +23,8 @@ install:
   - conda create --yes -q -n test python=$TRAVIS_PYTHON_VERSION pip numpy scipy pytest boto
   - conda env update -n test -f binder/environment.yml -q
   - source activate test
-  - pip install .
-  - pip install -r requirements-dev.txt
+  - pip install -q .
+  - pip install -q -r requirements-dev.txt
   - wget http://d3kbcqa49mib13.cloudfront.net/spark-1.6.0-bin-hadoop2.6.tgz
   - tar -xzf spark-1.6.0-bin-hadoop2.6.tgz
 
