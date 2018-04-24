@@ -1,12 +1,13 @@
+"""
+Since the keras contribution package is less robustly tested and
+compatiblity with Keras isn't always kept up to date, we have our own set of tests to ensure various layers that we need work
+"""
+
 import pytest
 import os
 pytestmark = pytest.mark.usefixtures("eng")
 _res_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                        'resources')
-__doc__ = """
-Since the keras contribution package is less robustly tested and 
-compatiblity with Keras isn't always kept up to date, we have our own set of tests to ensure various layers that we need work"""
-
 def test_pelu_layer(eng):
     from keras.models import Sequential
     from keras.layers import Dense
