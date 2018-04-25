@@ -1,4 +1,4 @@
-# pyqae [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/4Quant/pyqae/master)
+# pyqae [![Build Status](https://travis-ci.org/4Quant/pyqae.svg?branch=master)](https://travis-ci.org/4Quant/pyqae) [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/4Quant/pyqae/master)
 
 > python/pyspark image query analysis engine
 
