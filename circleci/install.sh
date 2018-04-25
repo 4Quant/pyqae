@@ -33,14 +33,14 @@ popd
 
 # Configure the conda environment and put it in the path using the
 # provided versions
-conda env create -n pyqae -f binder/environment.yml
+conda env create -n pyqae -f binder/environment.yml -q
 source activate pyqae
 
 export PYQAE_HOME=$(pwd)
 
-conda install --yes jupyter
-pip install pdoc==0.3.2 pygments
-pip install -r requirements-dev.txt
+conda install -q --yes jupyter
+pip install -q pdoc==0.3.2 pygments
+pip install -q -r requirements-dev.txt
 
 sh binder/postBuild
 
