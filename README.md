@@ -57,23 +57,7 @@ And then running
 python setup.py install
 ```
 
-## related packages
-
-There are a number of different tools which pyqae utilizes for analysis
-
-- [`keras`](https://github.com/fchollet/keras) deep learning wrapper tools
-- [`elephas`](https://github.com/maxpumperla/elephas) distribution code for ML and Keras
-- [`tensorflow`](https://github.com/tensorflow/tensorflow) core deep learning code
-- [`thunder`](https://github.com/thunder-project/thunder) thunder project for image and sequence analysis
-
-
-You can install the ones you want with `pip`, for example
-
-```
-pip install thunder-python
-```
-
-## using with spark
+# Using with spark
 
 Thunder doesn't require Spark and can run locally without it, but Spark and Thunder work great together! To install and configure a Spark cluster, consult the official [Spark documentation](http://spark.apache.org/docs/latest). Thunder supports Spark version 1.5+, and uses the Python API PySpark. If you have Spark installed, you can install Thunder just by calling `pip install thunder-python` on both the master node and all worker nodes of your cluster. Alternatively, you can clone this GitHub repository, and make sure it is on the `PYTHONPATH` of both the master and worker nodes.
 
