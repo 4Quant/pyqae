@@ -1,4 +1,4 @@
-# pyqae [![Build Status](https://travis-ci.org/4Quant/pyqae.svg?branch=master)](https://travis-ci.org/4Quant/pyqae) [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/4Quant/pyqae/master)
+# pyqae [![Build Status](https://travis-ci.org/4Quant/pyqae.svg?branch=master)](https://travis-ci.org/4Quant/pyqae) [![Coverage Status](https://coveralls.io/repos/github/4Quant/pyqae/badge.svg?branch=master)](https://coveralls.io/github/4Quant/pyqae?branch=master) [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/4Quant/pyqae/master)
 
 > python/pyspark image query analysis engine
 
