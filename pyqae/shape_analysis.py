@@ -79,6 +79,6 @@ def region_analysis(cur_mask, cur_image):
 if __name__ == '__main__':
     import doctest
     # noinspection PyUnresolvedReferences
-    import lungstage.shape_analysis
+    import pyqae.shape_analysis
 
-    doctest.testmod(lungstage.shape_analysis, verbose=True, optionflags=doctest.ELLIPSIS)
+    doctest.testmod(pyqae.shape_analysis, verbose=True, optionflags=doctest.ELLIPSIS)
