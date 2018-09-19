@@ -21,7 +21,7 @@ dependencies:
   - ipython>=6.2.1
   - pydot
   - h5py
-  - scikit-image<=0.20
+  - scikit-image<0.15
   - scikit-learn<=0.20
   - pytorch<=0.3.0
   - torchvision

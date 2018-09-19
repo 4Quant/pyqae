@@ -3,7 +3,7 @@ scipy
 six
 matplotlib
 pydot
-scikit-image >= 0.11.3
+scikit-image < 0.15
 pydicom >= 0.9.9
 pillow>=2.1.0
 boto >= 2.36.0
